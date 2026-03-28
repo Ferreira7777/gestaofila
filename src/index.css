@@ -248,9 +248,21 @@ h1, h2, h3 {
 .btn-icon.primary:hover { background: rgba(99, 102, 241, 0.1); color: var(--primary); border-color: var(--primary); }
 .btn-icon.danger:hover { background: rgba(239, 68, 68, 0.1); color: var(--danger); border-color: var(--danger); }
 
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.5rem;
+  margin-bottom: 2.5rem;
+}
+
 /* Responsive adjustments */
 @media (max-width: 640px) {
   .container { padding: 1rem; }
   .header { flex-direction: column; gap: 1.5rem; align-items: stretch; }
+  .header .logo-section { flex-direction: column; text-align: center; }
+  .header h1 { font-size: 1.5rem; }
   .modal-content { padding: 1.5rem; }
+  .form-row { grid-template-columns: 1fr; }
+  .stats-grid { grid-template-columns: 1fr; gap: 1rem; }
+  .queue-grid { grid-template-columns: 1fr; }
 }

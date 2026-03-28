@@ -162,8 +162,8 @@ function App() {
         </button>
       </header>
 
-      {/* Stats Overview (Optional) */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1.5rem', marginBottom: '2.5rem' }}>
+      {/* Stats Overview */}
+      <div className="stats-grid">
         <div className="glass" style={{ padding: '1.5rem' }}>
           <p style={{ color: 'var(--text-dim)', fontSize: '0.875rem' }}>Em Espera</p>
           <p style={{ fontSize: '2rem', fontWeight: '700' }}>{customers.filter(c => c.status === 'waiting').length}</p>
