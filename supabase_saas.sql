@@ -29,12 +29,11 @@ ON public.companies FOR INSERT
 TO authenticated 
 WITH CHECK (true);
 
--- O utilizador só vê os dados da sua própria empresa
-CREATE POLICY "Visualizar a própria empresa" 
+-- O utilizador pode ler as empresas (necessário no momento do registo para evitar o paradoxo do ovo e da galinha)
+CREATE POLICY "Visualizar empresas" 
 ON public.companies FOR SELECT 
-USING (
-  id IN (SELECT company_id FROM public.profiles WHERE profiles.id = auth.uid())
-);
+TO authenticated
+USING (true);
 
 -- Permitir ao utilizador resgistar o seu próprio perfil
 CREATE POLICY "Permitir utilizador criar o seu perfil" 
