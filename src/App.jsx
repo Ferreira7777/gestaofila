@@ -15,7 +15,6 @@ function App() {
   const [showModal, setShowModal] = useState(false);
   const [loading, setLoading] = useState(true);
   
-  // Form State
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -23,6 +22,13 @@ function App() {
     adults: 1,
     children: 0
   });
+
+  // Temporizador para atualizar os contadores "há X min" a cada 60s
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 60000);
+    return () => clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     // Verificar sessão ativa
@@ -170,15 +176,15 @@ function App() {
     }
   };
 
-  const updateStatus = async (id, newStatus) => {
+  const updateStatus = async (id, newStatus, extraData = {}) => {
     try {
       const { error } = await supabase
         .from('customers')
-        .update({ status: newStatus })
+        .update({ status: newStatus, ...extraData })
         .eq('id', id);
       
       if (error) throw error;
-      setCustomers(prev => prev.map(c => c.id === id ? { ...c, status: newStatus } : c));
+      setCustomers(prev => prev.map(c => c.id === id ? { ...c, status: newStatus, ...extraData } : c));
     } catch (err) {
       alert('Erro ao atualizar estado: ' + err.message);
     }
@@ -188,11 +194,18 @@ function App() {
     const message = `Olá ${customer.first_name}, a sua mesa para ${customer.adults + customer.children} pessoas está pronta no ${companyName}! Por favor, dirija-se à recepção.`;
     const smsUrl = `sms:${customer.phone_number}?body=${encodeURIComponent(message)}`;
     window.location.href = smsUrl;
-    await updateStatus(customer.id, 'notified');
+    await updateStatus(customer.id, 'notified', { notified_at: new Date().toISOString() });
   };
 
   const formatArrival = (timestamp) => {
     return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
+
+  const formatRelativeTime = (timestamp) => {
+    if (!timestamp) return '';
+    const diffMins = Math.floor((now - new Date(timestamp).getTime()) / 60000);
+    if (diffMins <= 0) return 'AGORINHA';
+    return `HÁ ${diffMins} MIN`;
   };
 
   const handleLogout = async () => {
@@ -261,9 +274,16 @@ function App() {
               <div className="card-header">
                 <div>
                   <h3 className="customer-name">{customer.first_name} {customer.last_name}</h3>
-                  <span className={`status-badge status-${customer.status}`}>
-                    {customer.status === 'waiting' ? 'Em Espera' : 'Notificado'}
-                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginTop: '0.2rem' }}>
+                    <span className={`status-badge status-${customer.status}`} style={{ textTransform: 'uppercase' }}>
+                      {customer.status === 'waiting' ? 'Em Espera' : 'Notificado'}
+                    </span>
+                    <span style={{ fontSize: '0.65rem', fontWeight: 600, letterSpacing: '0.05em', whiteSpace: 'nowrap' }}>
+                      {customer.status === 'waiting' 
+                        ? formatRelativeTime(customer.created_at || customer.arrival_time)
+                        : formatRelativeTime(customer.notified_at || customer.created_at || customer.arrival_time)}
+                    </span>
+                  </div>
                 </div>
                 <div className="meta-item" style={{ color: 'var(--text-dim)' }}>
                   <Clock size={16} /> {formatArrival(customer.created_at || customer.arrival_time)}
