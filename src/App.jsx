@@ -132,19 +132,9 @@ function App() {
   const sendSMS = async (customer) => {
     const message = `Olá ${customer.first_name}, a sua mesa para ${customer.adults + customer.children} pessoas está pronta! Por favor, dirija-se à recepção.`;
     
-    console.log(`[SMS Gateway] Sending to ${customer.phone_number}: ${message}`);
-    
-    // Simulating Android Gateway API Call (Option A)
-    // In a real scenario, this would be:
-    /*
-    await fetch('https://your-android-gateway.com/api/send', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer YOUR_KEY' },
-      body: JSON.stringify({ to: customer.phone_number, message })
-    });
-    */
-
-    alert(`SMS enviado para ${customer.first_name} (${customer.phone_number})`);
+    // Abrir a aplicação nativa de SMS do telemóvel
+    const smsUrl = `sms:${customer.phone_number}?body=${encodeURIComponent(message)}`;
+    window.location.href = smsUrl;
     
     // Atualização imediata do estado para 'notified'
     await updateStatus(customer.id, 'notified');
