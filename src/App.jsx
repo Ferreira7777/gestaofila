@@ -14,6 +14,7 @@ function App() {
   const [customers, setCustomers] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [viewMode, setViewMode] = useState('queue'); // 'queue' | 'history'
   
   const [formData, setFormData] = useState({
     firstName: '',
@@ -238,7 +239,13 @@ function App() {
             <p style={{ color: 'var(--text-dim)', fontSize: '0.875rem' }}>Gestão de Fila Inteligente</p>
           </div>
         </div>
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <button className={`btn ${viewMode === 'queue' ? 'btn-primary' : ''}`} onClick={() => setViewMode('queue')} style={{ background: viewMode === 'queue' ? '' : 'rgba(255,255,255,0.1)' }}>
+            Fila Atual
+          </button>
+          <button className={`btn ${viewMode === 'history' ? 'btn-primary' : ''}`} onClick={() => setViewMode('history')} style={{ background: viewMode === 'history' ? '' : 'rgba(255,255,255,0.1)' }}>
+            Histórico
+          </button>
           <button className="btn btn-primary" onClick={() => setShowModal(true)}>
             <Plus size={20} /> <span className="hide-mobile">Novo Cliente</span>
           </button>
@@ -269,14 +276,16 @@ function App() {
         <p style={{ textAlign: 'center', color: "var(--text-dim)" }}>A carregar fila...</p>
       ) : (
         <div className="queue-grid">
-          {customers.filter(c => c.status !== 'seated' && c.status !== 'cancelled').map((customer) => (
-            <div key={customer.id} className="glass customer-card">
+          {customers
+            .filter(c => viewMode === 'history' ? true : (c.status !== 'seated' && c.status !== 'cancelled'))
+            .map((customer) => (
+            <div key={customer.id} className="glass customer-card" style={{ opacity: (customer.status === 'seated' || customer.status === 'cancelled') ? 0.6 : 1 }}>
               <div className="card-header">
                 <div>
                   <h3 className="customer-name">{customer.first_name} {customer.last_name}</h3>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginTop: '0.2rem' }}>
                     <span className={`status-badge status-${customer.status}`} style={{ textTransform: 'uppercase' }}>
-                      {customer.status === 'waiting' ? 'Em Espera' : 'Notificado'}
+                      {customer.status === 'waiting' ? 'Em Espera' : customer.status === 'notified' ? 'Notificado' : customer.status === 'seated' ? 'Sentado' : 'Cancelado'}
                     </span>
                     <span style={{ fontSize: '0.65rem', fontWeight: 600, letterSpacing: '0.05em', whiteSpace: 'nowrap' }}>
                       {customer.status === 'waiting' 
@@ -302,21 +311,32 @@ function App() {
               </div>
 
               <div className="card-actions">
-                <button className="btn-icon primary" title="Enviar SMS" onClick={() => sendSMS(customer)}>
-                  <Send size={18} />
-                </button>
-                <button className="btn-icon success" title="Sentar Cliente" onClick={() => updateStatus(customer.id, 'seated')}>
-                  <CheckCircle2 size={18} />
-                </button>
-                <button className="btn-icon danger" title="Cancelar" onClick={() => updateStatus(customer.id, 'cancelled')}>
-                  <XCircle size={18} />
-                </button>
+                {customer.status !== 'seated' && customer.status !== 'cancelled' && (
+                  <>
+                    <button className="btn-icon primary" title="Enviar SMS" onClick={() => sendSMS(customer)}>
+                      <Send size={18} />
+                    </button>
+                    <button className="btn-icon success" title="Sentar Cliente" onClick={() => updateStatus(customer.id, 'seated')}>
+                      <CheckCircle2 size={18} />
+                    </button>
+                    <button className="btn-icon danger" title="Cancelar" onClick={() => updateStatus(customer.id, 'cancelled')}>
+                      <XCircle size={18} />
+                    </button>
+                  </>
+                )}
+                {(customer.status === 'seated' || customer.status === 'cancelled') && (
+                  <span style={{ color: 'var(--text-dim)', fontSize: '0.8rem', fontStyle: 'italic' }}>
+                    Cliente {customer.status === 'seated' ? 'sentado e finalizado' : 'cancelado da fila'}.
+                  </span>
+                )}
               </div>
             </div>
           ))}
-          {customers.filter(c => c.status !== 'seated' && c.status !== 'cancelled').length === 0 && (
+          {customers.filter(c => viewMode === 'history' ? true : (c.status !== 'seated' && c.status !== 'cancelled')).length === 0 && (
             <div className="glass" style={{ gridColumn: '1 / -1', padding: '4rem', textAlign: 'center', borderStyle: 'dashed' }}>
-              <p style={{ color: 'var(--text-dim)' }}>A fila está vazia. Comece por registar um novo cliente.</p>
+              <p style={{ color: 'var(--text-dim)' }}>
+                {viewMode === 'history' ? 'Ainda não existem clientes no histórico.' : 'A fila está vazia. Comece por registar um novo cliente.'}
+              </p>
             </div>
           )}
         </div>
