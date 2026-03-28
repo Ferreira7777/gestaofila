@@ -213,6 +213,15 @@ function App() {
     await supabase.auth.signOut();
   };
 
+  const getUniqueCustomers = () => {
+    const sorted = [...customers].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+    const uniqueMap = new Map();
+    sorted.forEach(c => {
+      uniqueMap.set(c.phone_number, c);
+    });
+    return Array.from(uniqueMap.values()).sort((a, b) => (a.first_name || '').localeCompare(b.first_name || ''));
+  };
+
   if (loading && !session) {
     return <div style={{ textAlign: 'center', padding: '4rem', color: 'white' }}>A carregar plataforma...</div>;
   }
@@ -246,6 +255,9 @@ function App() {
           <button className={`btn ${viewMode === 'history' ? 'btn-primary' : ''}`} onClick={() => setViewMode('history')} style={{ background: viewMode === 'history' ? '' : 'rgba(255,255,255,0.1)' }}>
             Histórico
           </button>
+          <button className={`btn ${viewMode === 'clients' ? 'btn-primary' : ''}`} onClick={() => setViewMode('clients')} style={{ background: viewMode === 'clients' ? '' : 'rgba(255,255,255,0.1)' }}>
+            Clientes
+          </button>
           <button className="btn btn-primary" onClick={() => setShowModal(true)}>
             <Plus size={20} /> <span className="hide-mobile">Novo Cliente</span>
           </button>
@@ -255,6 +267,37 @@ function App() {
         </div>
       </header>
 
+      {viewMode === 'clients' && (
+        <div className="glass" style={{ padding: '2rem', marginBottom: '2rem' }}>
+          <h2 style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <Users className="text-primary" /> Carteira de Clientes ({getUniqueCustomers().length})
+          </h2>
+          <div style={{ display: 'grid', gap: '0.75rem' }}>
+            {getUniqueCustomers().map((c) => (
+              <div key={c.phone_number} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem', background: 'rgba(255,255,255,0.05)', borderRadius: '0.75rem' }}>
+                <div>
+                  <h3 style={{ fontSize: '1.1rem', margin: 0 }}>{c.first_name} {c.last_name}</h3>
+                  <p style={{ color: 'var(--text-dim)', margin: 0, marginTop: '0.25rem', fontWeight: 600 }}>{c.phone_number}</p>
+                </div>
+                <button 
+                  className="btn-icon success" 
+                  title="WhatsApp"
+                  style={{ width: 'auto', padding: '0 1rem', borderRadius: '2rem', gap: '0.5rem', borderColor: '#25D366', color: '#25D366' }}
+                  onClick={() => window.location.href = `https://wa.me/${c.phone_number.replace(/\D/g,'')}?text=Ol%C3%A1%20${encodeURIComponent(c.first_name)},%20temos%20novidades%20no%20${encodeURIComponent(companyName)}!`}
+                >
+                  <Send size={16} /> <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>WhatsApp</span>
+                </button>
+              </div>
+            ))}
+            {getUniqueCustomers().length === 0 && (
+              <p style={{ textAlign: 'center', color: 'var(--text-dim)' }}>Sem clientes registados.</p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {viewMode !== 'clients' && (
+      <>
       {/* Stats Overview */}
       <div className="stats-grid">
         <div className="glass" style={{ padding: '1.5rem' }}>
@@ -340,6 +383,8 @@ function App() {
             </div>
           )}
         </div>
+      )}
+      </>
       )}
 
       {/* Registration Modal */}
