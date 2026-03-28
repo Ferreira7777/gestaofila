@@ -1,20 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from './lib/supabase';
+import Auth from './Auth';
 import { 
-  Users, 
-  UserPlus, 
-  Baby, 
-  Clock, 
-  CheckCircle2, 
-  MessageSquare, 
-  XCircle, 
-  ChevronRight,
-  LogOut,
-  Plus,
-  Send
+  Users, UserPlus, Baby, Clock, CheckCircle2, 
+  Send, XCircle, LogOut, Plus, Search
 } from 'lucide-react';
 
 function App() {
+  const [session, setSession] = useState(null);
+  const [companyId, setCompanyId] = useState(null);
+  const [companyName, setCompanyName] = useState('');
+  
   const [customers, setCustomers] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -29,13 +25,62 @@ function App() {
   });
 
   useEffect(() => {
+    // Verificar sessão ativa
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) {
+        loadUserProfile(session.user);
+      } else {
+        setLoading(false);
+      }
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session) {
+        loadUserProfile(session.user);
+      } else {
+        setSession(null);
+        setCompanyId(null);
+        setCustomers([]);
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const loadUserProfile = async (user) => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('company_id, companies(name)')
+        .eq('id', user.id)
+        .single();
+        
+      if (!error && data) {
+        setSession(user);
+        setCompanyId(data.company_id);
+        setCompanyName(data.companies.name);
+      }
+    } catch (err) {
+      console.error('Error loading profile:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!companyId) return;
+    
     fetchCustomers();
     
-    // Subscribe to real-time changes
-    const subscription = supabase
+    // Subscrever a alterações na tabela customers com filtro por empresa
+    const channel = supabase
       .channel('customers-channel')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'customers' }, (payload) => {
-        console.log('Evento Realtime Recebido:', payload);
+      .on('postgres_changes', { 
+        event: '*', 
+        schema: 'public', 
+        table: 'customers',
+        filter: `company_id=eq.${companyId}`
+      }, (payload) => {
         if (payload.eventType === 'INSERT') {
           setCustomers(prev => [payload.new, ...prev]);
         } else if (payload.eventType === 'UPDATE') {
@@ -47,36 +92,54 @@ function App() {
       .subscribe();
 
     return () => {
-      supabase.removeChannel(subscription);
+      supabase.removeChannel(channel);
     };
-  }, []);
+  }, [companyId]);
 
   const fetchCustomers = async () => {
     try {
       setLoading(true);
-      console.log('Iniciando fetch de clientes...');
       const { data, error } = await supabase
         .from('customers')
         .select('*')
+        .eq('company_id', companyId)
         .order('created_at', { ascending: false });
       
-      if (error) {
-        console.error('Erro ao procurar clientes:', error);
-        throw error;
-      }
-      
-      console.log('Clientes carregados:', data);
+      if (error) throw error;
       setCustomers(data || []);
     } catch (err) {
-      console.error('Erro geral no fetch:', err);
+      console.error('Erro no fetch:', err);
     } finally {
       setLoading(false);
     }
   };
 
+  const handlePhoneBlur = async () => {
+    if (!formData.phone || formData.phone.length < 9) return;
+    try {
+      const { data, error } = await supabase
+        .from('customers')
+        .select('first_name, last_name')
+        .eq('company_id', companyId)
+        .eq('phone_number', formData.phone)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+        
+      if (data) {
+        setFormData(prev => ({ 
+          ...prev, 
+          firstName: prev.firstName || data.first_name, 
+          lastName: prev.lastName || data.last_name 
+        }));
+      }
+    } catch (err) {
+      // Ignorar, pois pode ser simplesmente a primeira vez que o cliente vem
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    console.log('Tentando registar cliente:', formData);
     try {
       const { data, error } = await supabase.from('customers').insert([{
         first_name: formData.firstName,
@@ -84,59 +147,47 @@ function App() {
         phone_number: formData.phone,
         adults: parseInt(formData.adults),
         children: parseInt(formData.children),
-        status: 'waiting'
+        status: 'waiting',
+        company_id: companyId
       }]).select();
 
-      if (error) {
-        console.error('Erro do Supabase ao inserir:', error);
-        throw error;
-      }
+      if (error) throw error;
       
-      console.log('Cliente registado com sucesso:', data);
-      
-      // Atualização imediata do estado (fallback enquanto o Realtime não está ativo)
       if (data && data[0]) {
-        setCustomers(prev => [data[0], ...prev]);
+        // Fallback optimista para quando realtime está um bocado lento
+        setCustomers(prev => {
+          if (!prev.find(c => c.id === data[0].id)) {
+            return [data[0], ...prev];
+          }
+          return prev;
+        });
       }
 
       setShowModal(false);
       setFormData({ firstName: '', lastName: '', phone: '', adults: 1, children: 0 });
     } catch (err) {
-      console.error('Erro na submissão:', err);
-      alert('Erro ao registar cliente: ' + (err.message || 'Verifique se criou a tabela no Supabase.'));
+      alert('Erro ao registar cliente: ' + err.message);
     }
   };
 
   const updateStatus = async (id, newStatus) => {
     try {
-      console.log(`A atualizar estado do cliente ${id} para ${newStatus}...`);
       const { error } = await supabase
         .from('customers')
         .update({ status: newStatus })
         .eq('id', id);
       
-      if (error) {
-        console.error('Erro ao atualizar estado no Supabase:', error);
-        throw error;
-      }
-
-      // Atualização imediata do estado local
+      if (error) throw error;
       setCustomers(prev => prev.map(c => c.id === id ? { ...c, status: newStatus } : c));
-      console.log('Estado atualizado com sucesso localmente.');
     } catch (err) {
-      console.error('Erro ao atualizar estado:', err);
       alert('Erro ao atualizar estado: ' + err.message);
     }
   };
 
   const sendSMS = async (customer) => {
-    const message = `Olá ${customer.first_name}, a sua mesa para ${customer.adults + customer.children} pessoas está pronta! Por favor, dirija-se à recepção.`;
-    
-    // Abrir a aplicação nativa de SMS do telemóvel
+    const message = `Olá ${customer.first_name}, a sua mesa para ${customer.adults + customer.children} pessoas está pronta no ${companyName}! Por favor, dirija-se à recepção.`;
     const smsUrl = `sms:${customer.phone_number}?body=${encodeURIComponent(message)}`;
     window.location.href = smsUrl;
-    
-    // Atualização imediata do estado para 'notified'
     await updateStatus(customer.id, 'notified');
   };
 
@@ -144,22 +195,44 @@ function App() {
     return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+  };
+
+  if (loading && !session) {
+    return <div style={{ textAlign: 'center', padding: '4rem', color: 'white' }}>A carregar plataforma...</div>;
+  }
+
+  // Se não tem sessão ativa, mostra ecrã de Auth
+  if (!session) {
+    return <Auth onLogin={(user, cid, cname) => {
+      setSession(user);
+      setCompanyId(cid);
+      setCompanyName(cname);
+    }} />;
+  }
+
   return (
     <div className="container">
       {/* Header */}
-      <header className="header">
+      <header className="header" style={{ marginBottom: '2rem' }}>
         <div className="logo-section">
           <div className="logo-icon">
             <Users size={24} />
           </div>
           <div>
-            <h1>Gestão de Fila</h1>
-            <p style={{ color: 'var(--text-dim)', fontSize: '0.875rem' }}>Elegância na Recepção</p>
+            <h1>{companyName}</h1>
+            <p style={{ color: 'var(--text-dim)', fontSize: '0.875rem' }}>Gestão de Fila Inteligente</p>
           </div>
         </div>
-        <button className="btn btn-primary" onClick={() => setShowModal(true)}>
-          <Plus size={20} /> Novo Cliente
-        </button>
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <button className="btn btn-primary" onClick={() => setShowModal(true)}>
+            <Plus size={20} /> <span className="hide-mobile">Novo Cliente</span>
+          </button>
+          <button className="btn-icon" onClick={handleLogout} title="Terminar Sessão" style={{ background: 'rgba(239, 68, 68, 0.1)', color: 'var(--danger)', borderColor: 'var(--danger)' }}>
+            <LogOut size={20} />
+          </button>
+        </div>
       </header>
 
       {/* Stats Overview */}
@@ -193,7 +266,7 @@ function App() {
                   </span>
                 </div>
                 <div className="meta-item" style={{ color: 'var(--text-dim)' }}>
-                  <Clock size={16} /> {formatArrival(customer.arrival_time)}
+                  <Clock size={16} /> {formatArrival(customer.created_at || customer.arrival_time)}
                 </div>
               </div>
 
@@ -209,25 +282,13 @@ function App() {
               </div>
 
               <div className="card-actions">
-                <button 
-                  className="btn-icon primary" 
-                  title="Enviar SMS"
-                  onClick={() => sendSMS(customer)}
-                >
+                <button className="btn-icon primary" title="Enviar SMS" onClick={() => sendSMS(customer)}>
                   <Send size={18} />
                 </button>
-                <button 
-                  className="btn-icon success" 
-                  title="Sentar Cliente"
-                  onClick={() => updateStatus(customer.id, 'seated')}
-                >
+                <button className="btn-icon success" title="Sentar Cliente" onClick={() => updateStatus(customer.id, 'seated')}>
                   <CheckCircle2 size={18} />
                 </button>
-                <button 
-                  className="btn-icon danger" 
-                  title="Cancelar"
-                  onClick={() => updateStatus(customer.id, 'cancelled')}
-                >
+                <button className="btn-icon danger" title="Cancelar" onClick={() => updateStatus(customer.id, 'cancelled')}>
                   <XCircle size={18} />
                 </button>
               </div>
@@ -249,6 +310,26 @@ function App() {
               <UserPlus className="text-primary" /> Novo Cliente
             </h2>
             <form onSubmit={handleSubmit}>
+              
+              <div className="form-group">
+                <label className="form-label">Telemóvel (escreva o número e pressione fora)</label>
+                <div style={{ position: 'relative' }}>
+                  <input 
+                    type="tel" 
+                    className="form-input" 
+                    placeholder="Ex: 91xxxxxxx"
+                    required 
+                    value={formData.phone}
+                    onChange={(e) => setFormData({...formData, phone: e.target.value})}
+                    onBlur={handlePhoneBlur}
+                  />
+                  <Search size={16} style={{ position: 'absolute', right: '1rem', top: '1.1rem', color: 'var(--text-dim)' }} />
+                </div>
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginTop: '0.4rem' }}>
+                  A plataforma preenche automaticamente caso este cliente já vos tenha visitado.
+                </p>
+              </div>
+
               <div className="form-row">
                 <div className="form-group">
                   <label className="form-label">Primeiro Nome</label>
@@ -272,18 +353,6 @@ function App() {
                 </div>
               </div>
               
-              <div className="form-group">
-                <label className="form-label">Telemóvel</label>
-                <input 
-                  type="tel" 
-                  className="form-input" 
-                  placeholder="+351 9xx xxx xxx"
-                  required 
-                  value={formData.phone}
-                  onChange={(e) => setFormData({...formData, phone: e.target.value})}
-                />
-              </div>
-
               <div className="form-row">
                 <div className="form-group">
                   <label className="form-label">Adultos</label>
