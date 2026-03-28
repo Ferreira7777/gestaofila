@@ -42,11 +42,11 @@ ON public.profiles FOR INSERT
 TO authenticated 
 WITH CHECK (id = auth.uid());
 
--- O utilizador só vê perfis da sua empresa
-CREATE POLICY "Visualizar perfis da própria empresa" 
+-- O utilizador só acede ao seu próprio perfil
+CREATE POLICY "Visualizar o proprio perfil" 
 ON public.profiles FOR SELECT 
 USING (
-  company_id IN (SELECT company_id FROM public.profiles WHERE profiles.id = auth.uid())
+  id = auth.uid()
 );
 
 -- O grande filtro dos clientes: apenas ler, inserir, atualizar e apagar se pertencerem à sua empresa
