@@ -29,10 +29,10 @@ ON public.companies FOR INSERT
 TO authenticated 
 WITH CHECK (true);
 
--- O utilizador pode ler as empresas (necessário no momento do registo para evitar o paradoxo do ovo e da galinha)
+-- O utilizador pode ler as empresas (necessário para o staff e para o check-in público)
 CREATE POLICY "Visualizar empresas" 
 ON public.companies FOR SELECT 
-TO authenticated
+TO public
 USING (true);
 
 -- Permitir ao utilizador resgistar o seu próprio perfil
@@ -56,6 +56,15 @@ USING (
 )
 WITH CHECK (
   company_id IN (SELECT company_id FROM public.profiles WHERE profiles.id = auth.uid())
+);
+
+-- Permitir registo público na fila
+CREATE POLICY "Permitir registo público na fila" 
+ON public.customers FOR INSERT 
+TO public 
+WITH CHECK (
+  status = 'waiting' AND 
+  company_id IS NOT NULL
 );
 
 -- Activar Realtime para novos perfis e empresas (opcional)

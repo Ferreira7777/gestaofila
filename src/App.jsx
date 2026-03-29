@@ -3,8 +3,9 @@ import { supabase } from './lib/supabase';
 import Auth from './Auth';
 import { 
   Users, UserPlus, Baby, Clock, CheckCircle2, 
-  Send, XCircle, LogOut, Plus, Search
+  Send, XCircle, LogOut, Plus, Search, Settings, Link
 } from 'lucide-react';
+import PublicCheckin from './PublicCheckin';
 
 function App() {
   const [session, setSession] = useState(null);
@@ -23,6 +24,15 @@ function App() {
     adults: 1,
     children: 0
   });
+
+  // Estado para Check-in Público
+  const [regId, setRegId] = useState(null);
+  
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const r = params.get('reg');
+    if (r) setRegId(r);
+  }, []);
 
   // Temporizador para atualizar os contadores "há X min" a cada 60s
   const [now, setNow] = useState(Date.now());
@@ -192,7 +202,7 @@ function App() {
   };
 
   const sendSMS = async (customer) => {
-    const message = `Olá ${customer.first_name}, a sua mesa para ${customer.adults + customer.children} pessoas está pronta no ${companyName}! Por favor, dirija-se à recepção. Caso desista da reserva, p.f. envie para este numero a mensagem "Cancelar" obrigado`;
+    const message = `## ${companyName} ## Olá ${customer.first_name}, a sua mesa para ${customer.adults + customer.children} pessoas está pronta no ${companyName}! Por favor, dirija-se à recepção. Caso desista da reserva da mesa, por favor envie mensagem "Cancelar". Obrigado.`;
     const smsUrl = `sms:${customer.phone_number}?body=${encodeURIComponent(message)}`;
     window.location.href = smsUrl;
     await updateStatus(customer.id, 'notified', { notified_at: new Date().toISOString() });
@@ -221,6 +231,10 @@ function App() {
     });
     return Array.from(uniqueMap.values()).sort((a, b) => (a.first_name || '').localeCompare(b.first_name || ''));
   };
+
+  if (regId) {
+    return <PublicCheckin companyId={regId} />;
+  }
 
   if (loading && !session) {
     return <div style={{ textAlign: 'center', padding: '4rem', color: 'white' }}>A carregar plataforma...</div>;
@@ -258,6 +272,9 @@ function App() {
           <button className={`btn ${viewMode === 'clients' ? 'btn-primary' : ''}`} onClick={() => setViewMode('clients')} style={{ background: viewMode === 'clients' ? '' : 'rgba(255,255,255,0.1)' }}>
             Clientes
           </button>
+          <button className={`btn ${viewMode === 'settings' ? 'btn-primary' : ''}`} onClick={() => setViewMode('settings')} style={{ background: viewMode === 'settings' ? '' : 'rgba(255,255,255,0.1)' }}>
+            <Settings size={20} />
+          </button>
           <button className="btn btn-primary" onClick={() => setShowModal(true)}>
             <Plus size={20} /> <span className="hide-mobile">Novo Cliente</span>
           </button>
@@ -266,6 +283,42 @@ function App() {
           </button>
         </div>
       </header>
+
+      {viewMode === 'settings' && (
+        <div className="glass" style={{ padding: '2rem', marginBottom: '2rem' }}>
+          <h2 style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <Settings className="text-primary" /> Configurações do Sistema
+          </h2>
+          <div className="glass" style={{ padding: '2rem', background: 'rgba(255,255,255,0.02)' }}>
+            <h3 style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <Link size={18} /> Módulo de Auto-Check-in (Público)
+            </h3>
+            <p style={{ color: 'var(--text-dim)', marginBottom: '1.5rem', fontSize: '0.95rem' }}>
+              Partilhe este link ou gere um QR Code para que os seus clientes se possam registar na fila de espera autonomamente.
+            </p>
+            
+            <div style={{ background: 'rgba(0,0,0,0.2)', padding: '1rem', borderRadius: '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid var(--border-color)' }}>
+              <code style={{ fontSize: '0.85rem', color: 'var(--primary)', wordBreak: 'break-all' }}>
+                {window.location.origin}/?reg={companyId}
+              </code>
+              <button className="btn" style={{ fontSize: '0.75rem', padding: '0.5rem 1rem' }} onClick={() => {
+                navigator.clipboard.writeText(`${window.location.origin}/?reg=${companyId}`);
+                alert('Link copiado!');
+              }}>
+                Copiar Link
+              </button>
+            </div>
+            
+            <div style={{ marginTop: '2rem', padding: '1.5rem', border: '2px dashed var(--border-color)', borderRadius: '1rem', textAlign: 'center' }}>
+              <p style={{ fontSize: '0.8rem', color: 'var(--text-dim)', marginBottom: '1rem' }}>Sugestão: Use o link acima em sites como "qr-code-generator.com" para criar o seu código físico.</p>
+              <div style={{ background: 'white', padding: '1rem', display: 'inline-block', borderRadius: '0.5rem' }}>
+                {/* Simulação visual de um QR Code simplificado */}
+                <div style={{ width: '120px', height: '120px', background: 'linear-gradient(45deg, #000 25%, transparent 25%, transparent 75%, #000 75%, #000), linear-gradient(45deg, #000 25%, transparent 25%, transparent 75%, #000 75%, #000)', backgroundSize: '20px 20px', backgroundPosition: '0 0, 10px 10px', opacity: 0.1 }}></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {viewMode === 'clients' && (
         <div className="glass" style={{ padding: '2rem', marginBottom: '2rem' }}>
