@@ -389,6 +389,7 @@ function App() {
         <div className="queue-grid">
           {customers
             .filter(c => viewMode === 'history' ? true : (c.status !== 'seated' && c.status !== 'cancelled'))
+            .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
             .map((customer) => (
             <div key={customer.id} className="glass customer-card" style={{ opacity: (customer.status === 'seated' || customer.status === 'cancelled') ? 0.6 : 1 }}>
               <div className="card-header">
