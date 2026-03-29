@@ -89,7 +89,7 @@ function App() {
         filter: `company_id=eq.${companyId}`
       }, (payload) => {
         if (payload.eventType === 'INSERT') {
-          setCustomers(prev => [payload.new, ...prev]);
+          setCustomers(prev => [...prev, payload.new]);
         } else if (payload.eventType === 'UPDATE') {
           setCustomers(prev => prev.map(c => c.id === payload.new.id ? payload.new : c));
         } else if (payload.eventType === 'DELETE') {
@@ -110,7 +110,7 @@ function App() {
         .from('customers')
         .select('*')
         .eq('company_id', companyId)
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: true });
       
       if (error) throw error;
       setCustomers(data || []);
@@ -164,7 +164,7 @@ function App() {
         // Fallback optimista para quando realtime está um bocado lento
         setCustomers(prev => {
           if (!prev.find(c => c.id === data[0].id)) {
-            return [data[0], ...prev];
+            return [...prev, data[0]];
           }
           return prev;
         });
@@ -192,7 +192,7 @@ function App() {
   };
 
   const sendSMS = async (customer) => {
-    const message = `Olá ${customer.first_name}, a sua mesa para ${customer.adults + customer.children} pessoas está pronta no ${companyName}! Por favor, dirija-se à recepção.`;
+    const message = `Olá ${customer.first_name}, a sua mesa para ${customer.adults + customer.children} pessoas está pronta no ${companyName}! Por favor, dirija-se à recepção. Caso desista da reserva, p.f. envie para este numero a mensagem "Cancelar" obrigado`;
     const smsUrl = `sms:${customer.phone_number}?body=${encodeURIComponent(message)}`;
     window.location.href = smsUrl;
     await updateStatus(customer.id, 'notified', { notified_at: new Date().toISOString() });
