@@ -389,7 +389,13 @@ function App() {
         <div className="queue-grid">
           {customers
             .filter(c => viewMode === 'history' ? true : (c.status !== 'seated' && c.status !== 'cancelled'))
-            .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
+            .sort((a, b) => {
+              const prioridade = { notified: 1, waiting: 2, seated: 3, cancelled: 4 };
+              const pA = prioridade[a.status] || 99;
+              const pB = prioridade[b.status] || 99;
+              if (pA !== pB) return pA - pB;
+              return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+            })
             .map((customer) => (
             <div key={customer.id} className="glass customer-card" style={{ opacity: (customer.status === 'seated' || customer.status === 'cancelled') ? 0.6 : 1 }}>
               <div className="card-header">
