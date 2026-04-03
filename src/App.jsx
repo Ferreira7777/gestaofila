@@ -240,8 +240,10 @@ function App() {
         
         if (error) throw error;
       } catch (err) {
-        alert('Erro ao enviar via Twilio: ' + (err.message || 'Verifique se configurou os segredos corretamente no Supabase.'));
-        return; // Detém o avanço do status se falhar
+        console.error('Erro Twilio Completo:', err);
+        const errorDetail = err.message || JSON.stringify(err);
+        alert(`Erro Twilio [${err.status || '??'}]: ${errorDetail}`);
+        return; 
       }
     } else {
       // Método Direto (Grátis via Telemóvel)
