@@ -232,16 +232,12 @@ function App() {
       try {
         const baseUrl = (supabaseUrl || '').replace(/\/$/, '');
         const targetUrl = `${baseUrl}/functions/v1/send-sms`;
-        
-        // Diagnóstico rápido para o alerta
-        const diagInfo = `URL: ${baseUrl ? 'OK' : 'MISSING'} | KEY: ${supabaseAnonKey ? 'OK' : 'MISSING'}`;
 
         const response = await fetch(targetUrl, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'apikey': supabaseAnonKey,
-            // Removendo Authorization: Bearer para testar modo público puro
           },
           body: JSON.stringify({
             to: customer.phone_number,
@@ -251,12 +247,15 @@ function App() {
         });
         
         if (!response.ok) {
-           const errText = await response.text().catch(() => "Sem resposta");
-           throw new Error(`[Status ${response.status}] ${errText} | (${diagInfo})`);
+           throw new Error('Falha na ligação ao servidor de SMS.');
         }
+        
+        // Sucesso discreto (Pode ser removido se quiser que seja 100% silencioso)
+        console.log('Notificação enviada via Twilio');
+
       } catch (err) {
-        console.error('Erro Twilio Detalhado:', err);
-        alert(`FALHA NO ENVIO:\n${err.message}`);
+        console.error('Erro Twilio:', err);
+        alert('Não foi possível enviar a SMS automática. Verifique a sua ligação ou tente o Método Direto.');
         return; 
       }
     } else {
