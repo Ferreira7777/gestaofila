@@ -131,10 +131,17 @@ function App() {
   const fetchCustomers = async () => {
     try {
       setLoading(true);
+      
+      // Filtro para mostrar apenas os clientes de HOJE
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const todayISO = today.toISOString();
+
       const { data, error } = await supabase
         .from('customers')
         .select('*')
         .eq('company_id', companyId)
+        .gte('created_at', todayISO) // FILTRO CRÍTICO: Registos desde as 00:00 de hoje
         .order('created_at', { ascending: true });
       
       if (error) throw error;
