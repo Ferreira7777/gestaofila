@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from './lib/supabase';
 import { Users, UserPlus, Baby, CheckCircle2 } from 'lucide-react';
 
@@ -7,6 +7,7 @@ function PublicCheckin({ companyId }) {
   const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(true);
   const [queuePos, setQueuePos] = useState(0);
+  const isSubmittingRef = useRef(false);
   
   const [formData, setFormData] = useState({
     firstName: '',
@@ -32,6 +33,9 @@ function PublicCheckin({ companyId }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (isSubmittingRef.current) return;
+    
+    isSubmittingRef.current = true;
     setLoading(true);
     try {
       const { error } = await supabase.from('customers').insert([{
@@ -58,6 +62,7 @@ function PublicCheckin({ companyId }) {
     } catch (err) {
       alert('Erro ao registar: ' + err.message);
     } finally {
+      isSubmittingRef.current = false;
       setLoading(false);
     }
   };

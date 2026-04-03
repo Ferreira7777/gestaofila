@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from './lib/supabase';
 import Auth from './Auth';
 import { 
@@ -24,6 +24,9 @@ function App() {
     adults: 1,
     children: 0
   });
+
+  const [submitting, setSubmitting] = useState(false);
+  const isSubmittingRef = useRef(false);
 
   // Estado para Check-in Público
   const [regId, setRegId] = useState(null);
@@ -99,7 +102,11 @@ function App() {
         filter: `company_id=eq.${companyId}`
       }, (payload) => {
         if (payload.eventType === 'INSERT') {
-          setCustomers(prev => [...prev, payload.new]);
+          setCustomers(prev => {
+            // Evitar duplicados se a inserção manual já tiver adicionado o registo
+            if (prev.find(c => c.id === payload.new.id)) return prev;
+            return [...prev, payload.new];
+          });
         } else if (payload.eventType === 'UPDATE') {
           setCustomers(prev => prev.map(c => c.id === payload.new.id ? payload.new : c));
         } else if (payload.eventType === 'DELETE') {
@@ -123,7 +130,9 @@ function App() {
         .order('created_at', { ascending: true });
       
       if (error) throw error;
-      setCustomers(data || []);
+      // Garantir IDs únicos no fetch inicial
+      const uniqueData = Array.from(new Map(data.map(item => [item.id, item])).values());
+      setCustomers(uniqueData);
     } catch (err) {
       console.error('Erro no fetch:', err);
     } finally {
@@ -157,6 +166,10 @@ function App() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (isSubmittingRef.current) return;
+    
+    isSubmittingRef.current = true;
+    setSubmitting(true);
     try {
       const { data, error } = await supabase.from('customers').insert([{
         first_name: formData.firstName,
@@ -184,6 +197,9 @@ function App() {
       setFormData({ firstName: '', lastName: '', phone: '', adults: 1, children: 0 });
     } catch (err) {
       alert('Erro ao registar cliente: ' + err.message);
+    } finally {
+      isSubmittingRef.current = false;
+      setSubmitting(false);
     }
   };
 
@@ -202,7 +218,7 @@ function App() {
   };
 
   const sendSMS = async (customer) => {
-    const message = `## ${companyName} ## Olá ${customer.first_name}, a sua mesa para ${customer.adults + customer.children} pessoas está pronta no ${companyName}! Por favor, dirija-se à recepção. Caso desista da reserva da mesa, por favor envie mensagem "Cancelar". Obrigado.`;
+    const message = `Olá ${customer.first_name}, a sua mesa para ${customer.adults + customer.children} pessoas está pronta no ${companyName}! Por favor, dirija-se à recepção. Caso desista da reserva da mesa, por favor envie mensagem "Cancelar". Obrigado.`;
     const smsUrl = `sms:${customer.phone_number}?body=${encodeURIComponent(message)}`;
     window.location.href = smsUrl;
     await updateStatus(customer.id, 'notified', { notified_at: new Date().toISOString() });
@@ -387,17 +403,21 @@ function App() {
         <p style={{ textAlign: 'center', color: "var(--text-dim)" }}>A carregar fila...</p>
       ) : (
         <div className="queue-grid">
-          {customers
-            .filter(c => viewMode === 'history' ? true : (c.status !== 'seated' && c.status !== 'cancelled'))
-            .sort((a, b) => {
-              const prioridade = { notified: 1, waiting: 2, seated: 3, cancelled: 4 };
-              const pA = prioridade[a.status] || 99;
-              const pB = prioridade[b.status] || 99;
-              if (pA !== pB) return pA - pB;
-              return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
-            })
-            .map((customer) => (
-            <div key={customer.id} className="glass customer-card" style={{ opacity: (customer.status === 'seated' || customer.status === 'cancelled') ? 0.6 : 1 }}>
+          {(() => {
+            const items = customers.filter(c => viewMode === 'history' ? true : (c.status !== 'seated' && c.status !== 'cancelled'));
+            // Deduplicação absoluta no render para evitar quebra do DOM se as keys forem repetidas
+            const uniqueItems = Array.from(new Map(items.map(item => [item.id, item])).values());
+            
+            return uniqueItems
+              .sort((a, b) => {
+                const prioridade = { notified: 1, waiting: 2, seated: 3, cancelled: 4 };
+                const pA = prioridade[a.status] || 99;
+                const pB = prioridade[b.status] || 99;
+                if (pA !== pB) return pA - pB;
+                return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+              })
+              .map((customer) => (
+                <div key={customer.id} className="glass customer-card" style={{ opacity: (customer.status === 'seated' || customer.status === 'cancelled') ? 0.6 : 1 }}>
               <div className="card-header">
                 <div>
                   <h3 className="customer-name">{customer.first_name} {customer.last_name}</h3>
@@ -448,8 +468,9 @@ function App() {
                   </span>
                 )}
               </div>
-            </div>
-          ))}
+                </div>
+              ));
+          })()}
           {customers.filter(c => viewMode === 'history' ? true : (c.status !== 'seated' && c.status !== 'cancelled')).length === 0 && (
             <div className="glass" style={{ gridColumn: '1 / -1', padding: '4rem', textAlign: 'center', borderStyle: 'dashed' }}>
               <p style={{ color: 'var(--text-dim)' }}>
@@ -539,8 +560,8 @@ function App() {
               </div>
 
               <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
-                <button type="submit" className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }}>
-                  Registar na Fila
+                <button type="submit" disabled={submitting} className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }}>
+                  {submitting ? 'A registar...' : 'Registar na Fila'}
                 </button>
                 <button 
                   type="button" 

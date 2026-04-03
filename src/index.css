@@ -4,7 +4,7 @@
   --primary: #6366f1;
   --primary-hover: #4f46e5;
   --bg-dark: #0f172a;
-  --card-bg: rgba(30, 41, 59, 0.7);
+  --card-bg: rgba(30, 41, 59, 0.85); /* Mais sólido para evitar artefactos */
   --text-main: #f8fafc;
   --text-dim: #94a3b8;
   --border-color: rgba(255, 255, 255, 0.1);
@@ -168,9 +168,16 @@ h1, h2, h3 {
 
 .customer-card {
   padding: 1.5rem;
-  transition: all 0.3s;
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), 
+              opacity 0.3s ease, 
+              border-color 0.3s ease,
+              box-shadow 0.3s ease;
   position: relative;
-  overflow: hidden;
+  /* Aceleração por Hardware para evitar glitches no GPU */
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
 }
 
 .customer-card:hover {
@@ -265,4 +272,16 @@ h1, h2, h3 {
   .form-row { grid-template-columns: 1fr; }
   .stats-grid { grid-template-columns: 1fr; gap: 1rem; }
   .queue-grid { grid-template-columns: 1fr; }
+  
+  /* Background fixo e sólido no mobile para evitar glitches de repintura */
+  body {
+    background: var(--bg-dark) !important;
+  }
+  
+  /* Desativar Blur em Mobile (Causa glitches severos em alguns modelos Android) */
+  .glass {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    background: rgba(30, 41, 59, 0.98) !important; /* Quase sólido para máxima limpeza gráfica */
+  }
 }
