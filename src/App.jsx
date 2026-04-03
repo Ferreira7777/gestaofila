@@ -31,6 +31,14 @@ function App() {
   // Estado para Check-in Público
   const [regId, setRegId] = useState(null);
   
+  // Método de SMS individual por dispositivo (Direct | Twilio)
+  const [smsMethod, setSmsMethod] = useState(localStorage.getItem('fila_sms_method') || 'direct');
+
+  const handleSmsMethodChange = (method) => {
+    setSmsMethod(method);
+    localStorage.setItem('fila_sms_method', method);
+  };
+  
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const r = params.get('reg');
@@ -219,8 +227,28 @@ function App() {
 
   const sendSMS = async (customer) => {
     const message = `Olá ${customer.first_name}, a sua mesa para ${customer.adults + customer.children} pessoas está pronta no ${companyName}! Por favor, dirija-se à recepção. Caso desista da reserva da mesa, por favor envie mensagem "Cancelar". Obrigado.`;
-    const smsUrl = `sms:${customer.phone_number}?body=${encodeURIComponent(message)}`;
-    window.location.href = smsUrl;
+    
+    if (smsMethod === 'twilio') {
+      try {
+        const { data, error } = await supabase.functions.invoke('send-sms', {
+          body: {
+            to: customer.phone_number,
+            name: customer.first_name,
+            content: message
+          }
+        });
+        
+        if (error) throw error;
+      } catch (err) {
+        alert('Erro ao enviar via Twilio: ' + (err.message || 'Verifique se configurou os segredos corretamente no Supabase.'));
+        return; // Detém o avanço do status se falhar
+      }
+    } else {
+      // Método Direto (Grátis via Telemóvel)
+      const smsUrl = `sms:${customer.phone_number}?body=${encodeURIComponent(message)}`;
+      window.location.href = smsUrl;
+    }
+    
     await updateStatus(customer.id, 'notified', { notified_at: new Date().toISOString() });
   };
 
@@ -323,6 +351,43 @@ function App() {
               }}>
                 Copiar Link
               </button>
+            </div>
+            
+            <div style={{ marginTop: '2rem', padding: '2rem', background: 'rgba(255,255,255,0.03)', borderRadius: '1rem', border: '1px solid var(--border-color)' }}>
+              <h3 style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Send size={18} /> Método de Notificação (Este Dispositivo)
+              </h3>
+              <p style={{ color: 'var(--text-dim)', marginBottom: '1.5rem', fontSize: '0.9rem' }}>
+                Escolha como deseja enviar as notificações para este telemóvel ou computador específico.
+              </p>
+              
+              <div style={{ display: 'grid', gap: '1rem' }}>
+                <label className={`glass ${smsMethod === 'direct' ? 'border-primary' : ''}`} style={{ padding: '1rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '1rem', border: '1px solid var(--border-color)' }}>
+                  <input 
+                    type="radio" 
+                    name="sms_method" 
+                    checked={smsMethod === 'direct'} 
+                    onChange={() => handleSmsMethodChange('direct')}
+                  />
+                  <div>
+                    <p style={{ fontWeight: 600, margin: 0 }}>Link Direto (Grátis)</p>
+                    <p style={{ fontSize: '0.75rem', color: 'var(--text-dim)', margin: 0 }}>Usa o seu telemóvel atual. Abre a sua app de mensagens nativa.</p>
+                  </div>
+                </label>
+                
+                <label className={`glass ${smsMethod === 'twilio' ? 'border-primary' : ''}`} style={{ padding: '1rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '1rem', border: '1px solid var(--border-color)' }}>
+                  <input 
+                    type="radio" 
+                    name="sms_method" 
+                    checked={smsMethod === 'twilio'} 
+                    onChange={() => handleSmsMethodChange('twilio')}
+                  />
+                  <div>
+                    <p style={{ fontWeight: 600, margin: 0 }}>Twilio Automático (Profissional)</p>
+                    <p style={{ fontSize: '0.75rem', color: 'var(--text-dim)', margin: 0 }}>Envio imediato em segundo plano. Requer conta Twilio e saldo. Não precisa de sair da app.</p>
+                  </div>
+                </label>
+              </div>
             </div>
             
             <div style={{ marginTop: '2rem', padding: '2rem', border: '1px solid var(--border-color)', borderRadius: '1.5rem', textAlign: 'center', background: 'rgba(255,255,255,0.03)' }}>
