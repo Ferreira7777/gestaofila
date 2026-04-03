@@ -230,13 +230,18 @@ function App() {
     
     if (smsMethod === 'twilio') {
       try {
-        // Chamada dinâmica usando a URL oficial do projeto configurado no Vercel
-        const response = await fetch(`${supabaseUrl}/functions/v1/send-sms`, {
+        const baseUrl = (supabaseUrl || '').replace(/\/$/, '');
+        const targetUrl = `${baseUrl}/functions/v1/send-sms`;
+        
+        // Diagnóstico rápido para o alerta
+        const diagInfo = `URL: ${baseUrl ? 'OK' : 'MISSING'} | KEY: ${supabaseAnonKey ? 'OK' : 'MISSING'}`;
+
+        const response = await fetch(targetUrl, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'apikey': supabaseAnonKey,
-            'Authorization': `Bearer ${supabaseAnonKey}`
+            // Removendo Authorization: Bearer para testar modo público puro
           },
           body: JSON.stringify({
             to: customer.phone_number,
@@ -246,13 +251,12 @@ function App() {
         });
         
         if (!response.ok) {
-           const errBody = await response.json().catch(() => ({}));
-           throw new Error(errBody.error || `Servidor respondeu com status ${response.status}`);
+           const errText = await response.text().catch(() => "Sem resposta");
+           throw new Error(`[Status ${response.status}] ${errText} | (${diagInfo})`);
         }
       } catch (err) {
-        console.error('Erro Twilio Completo:', err);
-        const errorDetail = err.message || JSON.stringify(err);
-        alert(`Erro Twilio [${err.status || '??'}]: ${errorDetail}`);
+        console.error('Erro Twilio Detalhado:', err);
+        alert(`FALHA NO ENVIO:\n${err.message}`);
         return; 
       }
     } else {
