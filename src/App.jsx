@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { supabase } from './lib/supabase';
+import { supabase, supabaseUrl, supabaseAnonKey } from './lib/supabase';
 import Auth from './Auth';
 import { 
   Users, UserPlus, Baby, Clock, CheckCircle2, 
@@ -230,13 +230,13 @@ function App() {
     
     if (smsMethod === 'twilio') {
       try {
-        // Chamada direta à URL da Edge Function (IGNORAR ERRO 401 DO SUPABASE)
-        const response = await fetch(`https://iuakejpyqtykapmvehje.supabase.co/functions/v1/send-sms`, {
+        // Chamada dinâmica usando a URL oficial do projeto configurado no Vercel
+        const response = await fetch(`${supabaseUrl}/functions/v1/send-sms`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
-            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`
+            'apikey': supabaseAnonKey,
+            'Authorization': `Bearer ${supabaseAnonKey}`
           },
           body: JSON.stringify({
             to: customer.phone_number,
