@@ -230,15 +230,23 @@ function App() {
     
     if (smsMethod === 'twilio') {
       try {
-        const { data, error } = await supabase.functions.invoke('send-sms', {
-          body: {
+        // Chamada direta à URL da Edge Function (IGNORAR ERRO 401 DO SUPABASE)
+        const response = await fetch(`https://iuakejpyqtykapmvehje.supabase.co/functions/v1/send-sms`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
             to: customer.phone_number,
             name: customer.first_name,
             content: message
-          }
+          })
         });
         
-        if (error) throw error;
+        if (!response.ok) {
+           const errBody = await response.json().catch(() => ({}));
+           throw new Error(errBody.error || `Servidor respondeu com status ${response.status}`);
+        }
       } catch (err) {
         console.error('Erro Twilio Completo:', err);
         const errorDetail = err.message || JSON.stringify(err);
