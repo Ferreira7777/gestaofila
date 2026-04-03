@@ -253,16 +253,19 @@ function App() {
           })
         });
         
+        const data = await response.json();
+
         if (!response.ok) {
-           throw new Error('Falha na ligação ao servidor de SMS.');
+           // Diagnóstico detalhado para o utilizador
+           throw new Error(data.error || data.message || 'Erro desconhecido no servidor.');
         }
         
-        // Sucesso discreto (Pode ser removido se quiser que seja 100% silencioso)
-        console.log('Notificação enviada via Twilio');
+        console.log('Notificação enviada com sucesso:', data);
+        alert('Notificação enviada com sucesso!');
 
       } catch (err) {
-        console.error('Erro Twilio:', err);
-        alert('Não foi possível enviar a SMS automática. Verifique a sua ligação ou tente o Método Direto.');
+        console.error('Falha no Envio:', err);
+        alert(`FALHA NO ENVIO:\n${err.message}`);
         return; 
       }
     } else {
