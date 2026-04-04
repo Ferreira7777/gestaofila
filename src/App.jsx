@@ -3,7 +3,8 @@ import { supabase, supabaseUrl, supabaseAnonKey } from './lib/supabase';
 import Auth from './Auth';
 import { 
   Users, UserPlus, Baby, Clock, CheckCircle2, 
-  Send, XCircle, LogOut, Plus, Search, Settings, Link, Tablet
+  Send, XCircle, LogOut, Plus, Search, Settings, Link, Tablet,
+  Trash2, Edit3, Check, X
 } from 'lucide-react';
 import PublicCheckin from './PublicCheckin';
 import KioskMode from './KioskMode';
@@ -35,6 +36,13 @@ function App() {
 
   const [submitting, setSubmitting] = useState(false);
   const isSubmittingRef = useRef(false);
+
+  // Estados para Gestão de Clientes
+  const [selectedClients, setSelectedClients] = useState([]);
+  const [bulkMessage, setBulkMessage] = useState('');
+  const [editingClient, setEditingClient] = useState(null); // { id, phone, first_name, last_name }
+  const [editFormData, setEditFormData] = useState({ firstName: '', lastName: '', phone: '' });
+
 
   // Estado para Check-in Público
   const [regId, setRegId] = useState(null);
@@ -350,7 +358,132 @@ function App() {
 
 
 
+  // Funções de Gestão de Clientes
+  const handleDeleteClient = async (phone) => {
+    if (!window.confirm(`Tem a certeza que deseja eliminar o cliente com telemóvel ${phone}? Todos os registos históricos serão apagados.`)) return;
+    
+    try {
+      setLoading(true);
+      const { error } = await supabase
+        .from('customers')
+        .delete()
+        .eq('company_id', companyId)
+        .eq('phone_number', phone);
+      
+      if (error) throw error;
+      
+      setCustomers(prev => prev.filter(c => c.phone_number !== phone));
+      alert('Cliente e todo o seu histórico eliminados com sucesso.');
+    } catch (err) {
+      alert('Erro ao eliminar: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const startEditing = (client) => {
+    setEditingClient(client);
+    setEditFormData({ 
+      firstName: client.first_name, 
+      lastName: client.last_name, 
+      phone: client.phone_number 
+    });
+  };
+
+  const handleUpdateClient = async () => {
+    try {
+      setLoading(true);
+      const { error } = await supabase
+        .from('customers')
+        .update({ 
+          first_name: editFormData.firstName, 
+          last_name: editFormData.lastName, 
+          phone_number: editFormData.phone 
+        })
+        .eq('company_id', companyId)
+        .eq('phone_number', editingClient.phone_number);
+      
+      if (error) throw error;
+      
+      setCustomers(prev => prev.map(c => 
+        c.phone_number === editingClient.phone_number 
+        ? { ...c, first_name: editFormData.firstName, last_name: editFormData.lastName, phone_number: editFormData.phone } 
+        : c
+      ));
+      
+      setEditingClient(null);
+      alert('Dados do cliente atualizados com sucesso.');
+    } catch (err) {
+      alert('Erro ao atualizar: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSendBulkSMS = async () => {
+    if (selectedClients.length === 0) return alert('Selecione pelo menos um cliente.');
+    if (!bulkMessage.trim()) return alert('Escreva a mensagem que deseja enviar.');
+    
+    const count = selectedClients.length;
+    if (!window.confirm(`Deseja enviar esta SMS para ${count} clientes agora?`)) return;
+
+    setLoading(true);
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const phone of selectedClients) {
+      const customer = getUniqueCustomers().find(c => c.phone_number === phone);
+      if (!customer) continue;
+
+      const finalMsg = `${bulkMessage}\n\n${companyName}`;
+      
+      try {
+        if (smsMethod === 'twilio') {
+          const baseUrl = (supabaseUrl || '').replace(/\/$/, '');
+          const targetUrl = `${baseUrl}/functions/v1/send-sms`;
+          const resp = await fetch(targetUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'apikey': supabaseAnonKey },
+            body: JSON.stringify({ to: phone, name: customer.first_name, content: finalMsg })
+          });
+          if (resp.ok) successCount++; else failCount++;
+        } else if (smsMethod === 'native' && Capacitor.isNativePlatform() && NativeSms) {
+          await NativeSms.send({ phoneNumber: phone, message: finalMsg });
+          successCount++;
+        } else {
+          const smsUrl = `sms:${phone}?body=${encodeURIComponent(finalMsg)}`;
+          window.open(smsUrl, '_blank');
+          successCount++;
+        }
+      } catch (err) {
+        console.error(`Erro ao enviar para ${phone}:`, err);
+        failCount++;
+      }
+    }
+
+    setLoading(false);
+    setSelectedClients([]);
+    setBulkMessage('');
+    alert(`Processo concluído: ${successCount} envios com sucesso e ${failCount} falhas.`);
+  };
+
+  const toggleClientSelection = (phone) => {
+    setSelectedClients(prev => 
+      prev.includes(phone) ? prev.filter(p => p !== phone) : [...prev, phone]
+    );
+  };
+
+  const toggleSelectAll = () => {
+    const allPhones = getUniqueCustomers().map(c => c.phone_number);
+    if (selectedClients.length === allPhones.length) {
+      setSelectedClients([]);
+    } else {
+      setSelectedClients(allPhones);
+    }
+  };
+
   const handleLogoUpload = async (e) => {
+
     const file = e.target.files[0];
     if (!file || !companyId) return;
 
@@ -509,24 +642,109 @@ function App() {
 
       {viewMode === 'clients' && (
         <div className="glass" style={{ padding: '2rem', marginBottom: '2rem' }}>
-          <h2 style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <Users className="text-primary" /> Carteira de Clientes ({getUniqueCustomers().length})
-          </h2>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
+            <h2 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <Users className="text-primary" /> Carteira de Clientes ({getUniqueCustomers().length})
+            </h2>
+            <div style={{ display: 'flex', gap: '0.75rem' }}>
+              <button 
+                className="btn" 
+                onClick={toggleSelectAll}
+                style={{ background: 'rgba(255,255,255,0.1)', fontSize: '0.85rem', padding: '0.5rem 1rem' }}
+              >
+                {selectedClients.length === getUniqueCustomers().length ? 'Desmarcar Todos' : 'Selecionar Todos'}
+              </button>
+            </div>
+          </div>
+
+          {/* Bulk SMS Panel */}
+          <div style={{ background: 'rgba(99, 102, 241, 0.05)', border: '1px solid rgba(99, 102, 241, 0.2)', borderRadius: '1rem', padding: '1.5rem', marginBottom: '2rem' }}>
+            <h4 style={{ margin: '0 0 1rem 0', display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--primary)' }}>
+              <Send size={18} /> Enviar Mensagem em Lote
+            </h4>
+            <textarea
+              className="form-input"
+              placeholder="Escreva a mensagem personalizada aqui... (O nome do restaurante será adicionado no final)"
+              style={{ minHeight: '100px', marginBottom: '1rem', background: 'rgba(0,0,0,0.2)' }}
+              value={bulkMessage}
+              onChange={(e) => setBulkMessage(e.target.value)}
+            />
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-dim)' }}>
+                {selectedClients.length} cliente(s) selecionado(s)
+              </p>
+              <button 
+                className="btn btn-primary" 
+                onClick={handleSendBulkSMS}
+                disabled={selectedClients.length === 0 || !bulkMessage.trim()}
+                style={{ filter: (selectedClients.length === 0 || !bulkMessage.trim()) ? 'grayscale(1)' : 'none' }}
+              >
+                Enviar para Selecionados
+              </button>
+            </div>
+          </div>
+
           <div style={{ display: 'grid', gap: '0.75rem' }}>
             {getUniqueCustomers().map((c) => (
-              <div key={c.phone_number} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem', background: 'rgba(255,255,255,0.05)', borderRadius: '0.75rem' }}>
-                <div>
-                  <h3 style={{ fontSize: '1.1rem', margin: 0 }}>{c.first_name} {c.last_name}</h3>
-                  <p style={{ color: 'var(--text-dim)', margin: 0, marginTop: '0.25rem', fontWeight: 600 }}>{c.phone_number}</p>
+              <div key={c.phone_number} style={{ display: 'flex', alignItems: 'center', padding: '1rem', background: 'rgba(255,255,255,0.05)', borderRadius: '0.75rem', gap: '1rem' }}>
+                <input 
+                  type="checkbox" 
+                  checked={selectedClients.includes(c.phone_number)}
+                  onChange={() => toggleClientSelection(c.phone_number)}
+                  style={{ width: '20px', height: '20px', cursor: 'pointer' }}
+                />
+                
+                <div style={{ flex: 1 }}>
+                  {editingClient?.phone_number === c.phone_number ? (
+                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                      <input 
+                        className="form-input" 
+                        style={{ flex: 1, padding: '0.4rem' }} 
+                        value={editFormData.firstName} 
+                        onChange={(e) => setEditFormData({...editFormData, firstName: e.target.value})}
+                      />
+                      <input 
+                        className="form-input" 
+                        style={{ flex: 1, padding: '0.4rem' }} 
+                        value={editFormData.lastName} 
+                        onChange={(e) => setEditFormData({...editFormData, lastName: e.target.value})}
+                      />
+                      <input 
+                        className="form-input" 
+                        style={{ flex: 1, padding: '0.4rem' }} 
+                        value={editFormData.phone} 
+                        onChange={(e) => setEditFormData({...editFormData, phone: e.target.value})}
+                      />
+                    </div>
+                  ) : (
+                    <>
+                      <h3 style={{ fontSize: '1.1rem', margin: 0 }}>{c.first_name} {c.last_name}</h3>
+                      <p style={{ color: 'var(--text-dim)', margin: 0, marginTop: '0.25rem', fontWeight: 600 }}>{c.phone_number}</p>
+                    </>
+                  )}
                 </div>
-                <button 
-                  className="btn-icon success" 
-                  title="Enviar SMS"
-                  style={{ width: 'auto', padding: '0 1rem', borderRadius: '2rem', gap: '0.5rem' }}
-                  onClick={() => sendSMS(c)}
-                >
-                  <Send size={16} /> <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>Notificar</span>
-                </button>
+
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  {editingClient?.phone_number === c.phone_number ? (
+                    <>
+                      <button className="btn-icon success" onClick={handleUpdateClient} title="Guardar">
+                        <Check size={18} />
+                      </button>
+                      <button className="btn-icon danger" onClick={() => setEditingClient(null)} title="Cancelar">
+                        <X size={18} />
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button className="btn-icon primary" onClick={() => startEditing(c)} title="Editar">
+                        <Edit3 size={18} />
+                      </button>
+                      <button className="btn-icon danger" onClick={() => handleDeleteClient(c.phone_number)} title="Eliminar Histórico">
+                        <Trash2 size={18} />
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
             ))}
             {getUniqueCustomers().length === 0 && (

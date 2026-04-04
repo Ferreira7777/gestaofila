@@ -143,7 +143,7 @@ function KioskMode({ companyId, companyName, userEmail, onExit }) {
 
       if (error) throw error;
 
-      // Obter posição na fila
+      // Obter posição na fila (inclui em espera + notificados)
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
@@ -151,7 +151,7 @@ function KioskMode({ companyId, companyName, userEmail, onExit }) {
         .from('customers')
         .select('*', { count: 'exact', head: true })
         .eq('company_id', companyId)
-        .eq('status', 'waiting')
+        .in('status', ['waiting', 'notified'])
         .gte('created_at', today.toISOString());
 
       setQueuePos(count || 0);
