@@ -8,7 +8,9 @@ import {
 import PublicCheckin from './PublicCheckin';
 import KioskMode from './KioskMode';
 import SettingsPanel from './SettingsPanel';
-import { Capacitor } from '@capacitor/core';
+import { Capacitor, registerPlugin } from '@capacitor/core';
+
+const NativeSms = Capacitor.isNativePlatform() ? registerPlugin('NativeSms') : null;
 
 function App() {
   const [session, setSession] = useState(null);
@@ -299,16 +301,18 @@ function App() {
         return; 
       }
     } else if (smsMethod === 'native') {
-       if (Capacitor.isNativePlatform() && window.sms) {
-         // O intent '' instrui o Android a despachar a SMS diretamente do cartão sem abrir nada
-         const options = { android: { intent: '' } };
-         window.sms.send(customer.phone_number, message, options, async () => {
-           console.log('SMS enviado com sucesso em Background.');
-           await updateStatus(customer.id, 'notified', { notified_at: new Date().toISOString() });
-         }, (err) => {
-           alert('Falha nativa a enviar SMS: ' + err);
-         });
-         return; // Evitar executar o updateStatus automático no fim da função primária
+       if (Capacitor.isNativePlatform() && NativeSms) {
+         try {
+           const result = await NativeSms.send({
+             phoneNumber: customer.phone_number,
+             message: message
+           });
+           console.log('SMS enviado com sucesso em Background:', result);
+           alert('SMS enviado com sucesso em background!');
+         } catch (err) {
+           alert('Falha nativa a enviar SMS: ' + (err.message || err));
+           return;
+         }
        } else {
          alert('Erro: O envio invisível só funciona se a app for instalada como APK no teu Android. Foi acionado o método de Link Direto base.');
          const smsUrl = `sms:${customer.phone_number}?body=${encodeURIComponent(message)}`;
