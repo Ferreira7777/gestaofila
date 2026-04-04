@@ -12,6 +12,7 @@ function App() {
   const [session, setSession] = useState(null);
   const [companyId, setCompanyId] = useState(null);
   const [companyName, setCompanyName] = useState('');
+  const [logoUrl, setLogoUrl] = useState(null);
   
   const [customers, setCustomers] = useState([]);
   const [showModal, setShowModal] = useState(false);
@@ -92,7 +93,7 @@ function App() {
     try {
       const { data, error } = await supabase
         .from('profiles')
-        .select('company_id, companies(name)')
+        .select('company_id, companies(name, logo_url)')
         .eq('id', user.id)
         .single();
         
@@ -100,6 +101,7 @@ function App() {
         setSession(user);
         setCompanyId(data.company_id);
         setCompanyName(data.companies.name);
+        setLogoUrl(data.companies.logo_url);
       }
     } catch (err) {
       console.error('Error loading profile:', err);
@@ -306,6 +308,46 @@ function App() {
     await updateStatus(customer.id, 'notified', { notified_at: new Date().toISOString() });
   };
 
+  const handleLogoUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file || !companyId) return;
+
+    try {
+        setLoading(true);
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${companyId}/logo.${fileExt}`;
+        const filePath = `${fileName}`;
+
+        // 1. Upload da imagem para o bucket 'logos' (o bucket deve ser criado no Supabase primeiro)
+        const { error: uploadError } = await supabase.storage
+            .from('logos')
+            .upload(filePath, file, { upsert: true });
+
+        if (uploadError) throw uploadError;
+
+        // 2. Obter URL pública
+        const { data: { publicUrl } } = supabase.storage
+            .from('logos')
+            .getPublicUrl(filePath);
+
+        // 3. Atualizar a tabela companies com a URL
+        const { error: updateError } = await supabase
+            .from('companies')
+            .update({ logo_url: publicUrl })
+            .eq('id', companyId);
+
+        if (updateError) throw updateError;
+
+        setLogoUrl(publicUrl);
+        alert('Logótipo atualizado com sucesso!');
+    } catch (err) {
+        console.error('Erro no upload:', err);
+        alert('Erro ao carregar logótipo: Certifique-se que criou o bucket "logos" no Supabase e que o definiu como Público.');
+    } finally {
+        setLoading(false);
+    }
+  };
+
   const formatArrival = (timestamp) => {
     return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
@@ -364,8 +406,12 @@ function App() {
       {/* Header */}
       <header className="header" style={{ marginBottom: '2rem' }}>
         <div className="logo-section">
-          <div className="logo-icon">
-            <Users size={24} />
+          <div className="logo-icon" style={{ padding: logoUrl ? '0' : '0.5rem', overflow: 'hidden' }}>
+            {logoUrl ? (
+                <img src={logoUrl} alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            ) : (
+                <Users size={24} />
+            )}
           </div>
           <div>
             <h1>{companyName} <span style={{ fontSize: '0.6rem', verticalAlign: 'middle', opacity: 0.5 }}>v2</span></h1>
@@ -459,6 +505,38 @@ function App() {
               </div>
             </div>
             
+            <div style={{ marginTop: '2rem', padding: '2rem', background: 'rgba(255,255,255,0.03)', borderRadius: '1rem', border: '1px solid var(--border-color)' }}>
+              <h3 style={{ marginBottom: '1rem' }}>Identidade Visual</h3>
+              <p style={{ color: 'var(--text-dim)', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
+                Carregue o logótipo do seu restaurante para aparecer no cabeçalho e páginas de check-in.
+              </p>
+              
+              <div style={{ display: 'flex', alignItems: 'center', gap: '2rem' }}>
+                <div style={{ width: '100px', height: '100px', borderRadius: '1rem', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+                    {logoUrl ? (
+                        <img src={logoUrl} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    ) : (
+                        <Users size={32} style={{ opacity: 0.2 }} />
+                    )}
+                </div>
+                <div>
+                   <input 
+                     type="file" 
+                     id="logo-upload" 
+                     accept="image/*" 
+                     style={{ display: 'none' }} 
+                     onChange={handleLogoUpload}
+                   />
+                   <label htmlFor="logo-upload" className="btn btn-primary" style={{ cursor: 'pointer' }}>
+                     {logoUrl ? 'Alterar Logótipo' : 'Escolher Logótipo'}
+                   </label>
+                   <p style={{ fontSize: '0.7rem', color: 'var(--text-dim)', marginTop: '0.5rem' }}>
+                     Sugestão: Use uma imagem quadrada (.png ou .jpg).
+                   </p>
+                </div>
+              </div>
+            </div>
+
             <div style={{ marginTop: '2rem', padding: '2rem', border: '1px solid var(--border-color)', borderRadius: '1.5rem', textAlign: 'center', background: 'rgba(255,255,255,0.03)' }}>
               <p style={{ fontSize: '1rem', color: 'var(--text-main)', marginBottom: '1.5rem', fontWeight: 600 }}>O seu QR Code de Check-in:</p>
               <div style={{ background: 'white', padding: '1rem', display: 'inline-block', borderRadius: '1rem', boxShadow: '0 10px 30px rgba(0,0,0,0.5)', marginBottom: '1.5rem' }}>

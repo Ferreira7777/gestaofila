@@ -4,6 +4,7 @@ import { Users, UserPlus, Baby, CheckCircle2 } from 'lucide-react';
 
 function PublicCheckin({ companyId }) {
   const [companyName, setCompanyName] = useState('');
+  const [logoUrl, setLogoUrl] = useState(null);
   const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(true);
   const [queuePos, setQueuePos] = useState(0);
@@ -21,11 +22,14 @@ function PublicCheckin({ companyId }) {
     async function loadCompany() {
       const { data, error } = await supabase
         .from('companies')
-        .select('name')
+        .select('name, logo_url')
         .eq('id', companyId)
         .single();
       
-      if (data) setCompanyName(data.name);
+      if (data) {
+        setCompanyName(data.name);
+        setLogoUrl(data.logo_url);
+      }
       setLoading(false);
     }
     loadCompany();
@@ -104,8 +108,12 @@ function PublicCheckin({ companyId }) {
     <div className="container" style={{ display: 'flex', justifyContent: 'center', padding: '2rem 1rem' }}>
       <div className="glass" style={{ width: '100%', maxWidth: '600px', padding: '2.5rem' }}>
         <div style={{ textAlign: 'center', marginBottom: '2.5rem' }}>
-          <div className="logo-icon" style={{ margin: '0 auto 1.5rem' }}>
-            <Users size={32} />
+          <div className="logo-icon" style={{ margin: '0 auto 1.5rem', padding: logoUrl ? '0' : '0.5rem', overflow: 'hidden' }}>
+            {logoUrl ? (
+                <img src={logoUrl} alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            ) : (
+                <Users size={32} />
+            )}
           </div>
           <h1 style={{ fontSize: '2.2rem', marginBottom: '0.5rem' }}>{companyName}</h1>
           <p style={{ color: 'var(--text-dim)' }}>Registo de Fila de Espera</p>

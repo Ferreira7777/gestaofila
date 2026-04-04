@@ -4,6 +4,7 @@ import { Users, UserPlus, Baby, CheckCircle2, Lock, Search, LogIn } from 'lucide
 
 function KioskMode({ companyId, companyName, userEmail, onExit }) {
   const [success, setSuccess] = useState(false);
+  const [logoUrl, setLogoUrl] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [queuePos, setQueuePos] = useState(0);
   const [waitingCount, setWaitingCount] = useState(0);
@@ -25,6 +26,7 @@ function KioskMode({ companyId, companyName, userEmail, onExit }) {
   // Carregar contador de clientes em espera (realtime)
   useEffect(() => {
     fetchWaitingCount();
+    fetchCompanyData();
 
     const channel = supabase
       .channel('kiosk-waiting-channel')
@@ -42,6 +44,20 @@ function KioskMode({ companyId, companyName, userEmail, onExit }) {
       supabase.removeChannel(channel);
     };
   }, [companyId]);
+
+  const fetchCompanyData = async () => {
+    try {
+      const { data } = await supabase
+        .from('companies')
+        .select('logo_url')
+        .eq('id', companyId)
+        .single();
+      
+      if (data) setLogoUrl(data.logo_url);
+    } catch (err) {
+      console.error('Erro ao carregar dados da empresa:', err);
+    }
+  };
 
   const fetchWaitingCount = async () => {
     try {
@@ -209,8 +225,12 @@ function KioskMode({ companyId, companyName, userEmail, onExit }) {
       <div className="kiosk-container">
         {/* Cabeçalho */}
         <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
-          <div style={styles.logoIcon}>
-            <Users size={36} color="white" />
+          <div style={{ ...styles.logoIcon, padding: logoUrl ? '0' : '0.5rem', overflow: 'hidden' }}>
+            {logoUrl ? (
+                <img src={logoUrl} alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            ) : (
+                <Users size={36} color="white" />
+            )}
           </div>
           <h1 style={{ fontSize: '1.8rem', margin: '0.75rem 0 0.25rem', color: 'white', fontWeight: 700 }}>{companyName}</h1>
           <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '1rem' }}>Registe-se na Fila de Espera</p>
