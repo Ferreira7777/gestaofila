@@ -32,8 +32,17 @@ function App() {
   // Estado para Check-in Público
   const [regId, setRegId] = useState(null);
   
-  // Estado para Modo Quiosque
-  const [kioskMode, setKioskMode] = useState(false);
+  // Estado para Modo Quiosque (Persistido para segurança)
+  const [kioskMode, setKioskMode] = useState(localStorage.getItem('kiosk_active') === 'true');
+  
+  const handleSetKioskMode = (active) => {
+    setKioskMode(active);
+    if (active) {
+      localStorage.setItem('kiosk_active', 'true');
+    } else {
+      localStorage.removeItem('kiosk_active');
+    }
+  };
   
   // Método de SMS individual por dispositivo (Direct | Twilio)
   const [smsMethod, setSmsMethod] = useState(localStorage.getItem('fila_sms_method') || 'direct');
@@ -336,7 +345,7 @@ function App() {
         companyId={companyId}
         companyName={companyName}
         userEmail={session.email}
-        onExit={() => setKioskMode(false)}
+        onExit={() => handleSetKioskMode(false)}
       />
     );
   }
@@ -376,7 +385,7 @@ function App() {
           <button className={`btn ${viewMode === 'settings' ? 'btn-primary' : ''}`} onClick={() => setViewMode('settings')} style={{ background: viewMode === 'settings' ? '' : 'rgba(255,255,255,0.1)' }}>
             <Settings size={20} />
           </button>
-          <button className="btn btn-primary" onClick={() => setKioskMode(true)} style={{ background: 'var(--primary)', boxShadow: '0 4px 12px rgba(99, 102, 241, 0.3)' }} title="Modo Tablet">
+          <button className="btn btn-primary" onClick={() => handleSetKioskMode(true)} style={{ background: 'var(--primary)', boxShadow: '0 4px 12px rgba(99, 102, 241, 0.3)' }} title="Modo Tablet">
             <Tablet size={18} /> Quiosque
           </button>
           <button className="btn btn-primary" onClick={() => setShowModal(true)}>
