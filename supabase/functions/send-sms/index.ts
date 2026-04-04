@@ -1,55 +1,59 @@
-// supabase/functions/send-sms/index.ts
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-serve(async (req) => {
-  // Lidar com pedidos OPTIONS (CORS)
+Deno.serve(async (req) => {
+  // CORS Preflight
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
 
   try {
-    const { to, content } = await req.json()
+    const { to, content } = await req.json();
+    
+    // Novas Variáveis para o EasySendSMS (Secrets)
+    const apiKey = (Deno.env.get('EASYSEND_API_KEY') || '').trim();
+    const fromName = (Deno.env.get('EASYSEND_FROM') || 'GESTAOFILA').trim();
 
-    const accountSid = Deno.env.get('TWILIO_ACCOUNT_SID')
-    const authToken = Deno.env.get('TWILIO_AUTH_TOKEN')
-    const fromNumber = Deno.env.get('TWILIO_FROM_NUMBER')
-
-    if (!accountSid || !authToken || !fromNumber) {
-      throw new Error('Configurações do Twilio em falta no Supabase (Secrets).')
+    if (!apiKey) {
+      throw new Error("Falta o segredo EASYSEND_API_KEY no Supabase.");
     }
 
-    // Criar a Basic Auth para o Twilio
-    const auth = btoa(`${accountSid}:${authToken}`)
+    // FORMATADOR: O EasySendSMS quer o número internacional LIMPO (Ex: 351960000000)
+    let cleanTo = (to || '').trim().replace(/\s/g, '').replace('+', '');
+    
+    // Se for um número PT de 9 dígitos sem prefixo, adiciona 351
+    if (cleanTo.length === 9 && (cleanTo.startsWith('9') || cleanTo.startsWith('2'))) {
+      cleanTo = `351${cleanTo}`;
+    }
 
-    const response = await fetch(
-      `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'Authorization': `Basic ${auth}`,
-        },
-        body: new URLSearchParams({
-          To: to,
-          From: fromNumber,
-          Body: content,
-        }).toString(),
-      }
-    )
+    console.log(`A enviar pedido para EasySendSMS para o número ${cleanTo}...`);
 
-    const data = await response.json()
+    const response = await fetch(`https://restapi.easysendsms.app/v1/rest/sms/send`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': apiKey,
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify({
+        from: fromName,
+        to: cleanTo,
+        text: content,
+        type: 0 // 0 = Texto Normal (GSM), 1 = Unicode
+      })
+    });
+
+    const data = await response.json();
+    console.log(`Resposta do EasySendSMS (Status ${response.status}):`, JSON.stringify(data));
 
     if (!response.ok) {
-      throw new Error(data.message || 'Erro ao comunicar com o Twilio.')
+      throw new Error(data.message || 'Erro ao comunicar com o EasySendSMS.')
     }
 
     return new Response(
-      JSON.stringify({ success: true, sid: data.sid }),
+      JSON.stringify({ success: true, data }),
       { 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 200 
@@ -57,6 +61,7 @@ serve(async (req) => {
     )
 
   } catch (error) {
+    console.error(`ERRO NA EDGE FUNCTION: ${error.message}`);
     return new Response(
       JSON.stringify({ error: error.message }),
       { 

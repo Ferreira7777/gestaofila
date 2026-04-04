@@ -3,9 +3,10 @@ import { supabase, supabaseUrl, supabaseAnonKey } from './lib/supabase';
 import Auth from './Auth';
 import { 
   Users, UserPlus, Baby, Clock, CheckCircle2, 
-  Send, XCircle, LogOut, Plus, Search, Settings, Link
+  Send, XCircle, LogOut, Plus, Search, Settings, Link, Tablet
 } from 'lucide-react';
 import PublicCheckin from './PublicCheckin';
+import KioskMode from './KioskMode';
 
 function App() {
   const [session, setSession] = useState(null);
@@ -30,6 +31,9 @@ function App() {
 
   // Estado para Check-in Público
   const [regId, setRegId] = useState(null);
+  
+  // Estado para Modo Quiosque
+  const [kioskMode, setKioskMode] = useState(false);
   
   // Método de SMS individual por dispositivo (Direct | Twilio)
   const [smsMethod, setSmsMethod] = useState(localStorage.getItem('fila_sms_method') || 'direct');
@@ -309,6 +313,18 @@ function App() {
     return <div style={{ textAlign: 'center', padding: '4rem', color: 'white' }}>A carregar plataforma...</div>;
   }
 
+  // Se está em modo quiosque, renderizar apenas o quiosque
+  if (kioskMode && session && companyId) {
+    return (
+      <KioskMode
+        companyId={companyId}
+        companyName={companyName}
+        userEmail={session.email}
+        onExit={() => setKioskMode(false)}
+      />
+    );
+  }
+
   // Se não tem sessão ativa, mostra ecrã de Auth
   if (!session) {
     return <Auth onLogin={(user, cid, cname) => {
@@ -327,7 +343,7 @@ function App() {
             <Users size={24} />
           </div>
           <div>
-            <h1>{companyName}</h1>
+            <h1>{companyName} <span style={{ fontSize: '0.6rem', verticalAlign: 'middle', opacity: 0.5 }}>v2</span></h1>
             <p style={{ color: 'var(--text-dim)', fontSize: '0.875rem' }}>Gestão de Fila Inteligente</p>
           </div>
         </div>
@@ -343,6 +359,9 @@ function App() {
           </button>
           <button className={`btn ${viewMode === 'settings' ? 'btn-primary' : ''}`} onClick={() => setViewMode('settings')} style={{ background: viewMode === 'settings' ? '' : 'rgba(255,255,255,0.1)' }}>
             <Settings size={20} />
+          </button>
+          <button className="btn btn-primary" onClick={() => setKioskMode(true)} style={{ background: 'var(--primary)', boxShadow: '0 4px 12px rgba(99, 102, 241, 0.3)' }} title="Modo Tablet">
+            <Tablet size={18} /> Quiosque
           </button>
           <button className="btn btn-primary" onClick={() => setShowModal(true)}>
             <Plus size={20} /> <span className="hide-mobile">Novo Cliente</span>
