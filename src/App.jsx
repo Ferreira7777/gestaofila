@@ -13,6 +13,7 @@ function App() {
   const [companyId, setCompanyId] = useState(null);
   const [companyName, setCompanyName] = useState('');
   const [logoUrl, setLogoUrl] = useState(null);
+  const [closingTime, setClosingTime] = useState('00:00');
   
   const [customers, setCustomers] = useState([]);
   const [showModal, setShowModal] = useState(false);
@@ -94,7 +95,7 @@ function App() {
     try {
       const { data, error } = await supabase
         .from('profiles')
-        .select('company_id, companies(name, logo_url)')
+        .select('company_id, companies(name, logo_url, closing_time)')
         .eq('id', user.id)
         .single();
         
@@ -103,6 +104,9 @@ function App() {
         setCompanyId(data.company_id);
         setCompanyName(data.companies.name);
         setLogoUrl(data.companies.logo_url);
+        if (data.companies.closing_time) {
+          setClosingTime(data.companies.closing_time);
+        }
       }
     } catch (err) {
       console.error('Error loading profile:', err);
@@ -142,22 +146,30 @@ function App() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [companyId]);
+  }, [companyId, closingTime]);
 
   const fetchCustomers = async () => {
     try {
       setLoading(true);
       
-      // Filtro para mostrar apenas os clientes de HOJE
+      const [closeHour, closeMinute] = (closingTime || '00:00').split(':').map(Number);
       const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const todayISO = today.toISOString();
+      let startOfDay = new Date();
+      startOfDay.setHours(closeHour, closeMinute, 0, 0);
+
+      // Se a hora atual for menor que a hora de fecho (ex: 02h00 atual < 04h00 fecho), 
+      // significa que ainda estamos no "turno" do dia anterior.
+      if (today < startOfDay) {
+        startOfDay.setDate(startOfDay.getDate() - 1);
+      }
+
+      const todayISO = startOfDay.toISOString();
 
       const { data, error } = await supabase
         .from('customers')
         .select('*')
         .eq('company_id', companyId)
-        .gte('created_at', todayISO) // FILTRO CRÍTICO: Registos desde as 00:00 de hoje
+        .gte('created_at', todayISO) // FILTRO CRÍTICO: Registos desde a abertura configurada
         .order('created_at', { ascending: true });
       
       if (error) throw error;
@@ -349,6 +361,16 @@ function App() {
     }
   };
 
+  const handleClosingTimeChange = async (e) => {
+    const newTime = e.target.value;
+    setClosingTime(newTime);
+    try {
+      await supabase.from('companies').update({ closing_time: newTime }).eq('id', companyId);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   const formatArrival = (timestamp) => {
     return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
@@ -503,6 +525,27 @@ function App() {
                     <p style={{ fontSize: '0.75rem', color: 'var(--text-dim)', margin: 0 }}>Envio imediato em segundo plano. Requer conta Twilio e saldo. Não precisa de sair da app.</p>
                   </div>
                 </label>
+              </div>
+            </div>
+
+            <div style={{ marginTop: '2rem', padding: '2rem', background: 'rgba(255,255,255,0.03)', borderRadius: '1rem', border: '1px solid var(--border-color)' }}>
+              <h3 style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Clock size={18} /> Fecho do Dia / Reinício da Fila
+              </h3>
+              <p style={{ color: 'var(--text-dim)', marginBottom: '1rem', fontSize: '0.9rem' }}>
+                Defina a hora a que o seu estabelecimento encerra. A fila é limpa automaticamente quando passar dessa mesma hora (útil para quem fecha portas só depois da meia-noite).
+              </p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+                <input 
+                  type="time" 
+                  className="form-input" 
+                  style={{ width: '150px' }}
+                  value={closingTime}
+                  onChange={handleClosingTimeChange}
+                />
+                <span style={{ fontSize: '0.85rem', color: 'var(--text-dim)' }}>
+                  A fila começará do zero todos os dias às {closingTime}.
+                </span>
               </div>
             </div>
             
