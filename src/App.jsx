@@ -3,7 +3,7 @@ import { supabase, supabaseUrl, supabaseAnonKey } from './lib/supabase';
 import Auth from './Auth';
 import { 
   Users, UserPlus, Baby, Clock, CheckCircle2, 
-  Send, XCircle, LogOut, Plus, Search, Settings, Link, Tablet, MessageCircle
+  Send, XCircle, LogOut, Plus, Search, Settings, Link, Tablet
 } from 'lucide-react';
 import PublicCheckin from './PublicCheckin';
 import KioskMode from './KioskMode';
@@ -327,21 +327,7 @@ function App() {
     await updateStatus(customer.id, 'notified', { notified_at: new Date().toISOString() });
   };
 
-  const sendWhatsApp = async (customer) => {
-    const message = `Olá ${customer.first_name}, a sua mesa para ${customer.adults + customer.children} pessoas está pronta no ${companyName}! Por favor, dirija-se à recepção. Caso desista da reserva da mesa, por favor envie mensagem "Cancelar". Obrigado.`;
-    
-    // Formatar número para o WhatsApp (apenas números, garantindo código de país)
-    let cleanPhone = customer.phone_number.replace(/\D/g, '');
-    if (cleanPhone.length === 9) cleanPhone = `351${cleanPhone}`;
-    
-    const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
-    
-    // Abrir em nova aba (recomendado)
-    window.open(waUrl, '_blank');
-    
-    // Atualizar estado para notificado
-    await updateStatus(customer.id, 'notified', { notified_at: new Date().toISOString() });
-  };
+
 
   const handleLogoUpload = async (e) => {
     const file = e.target.files[0];
@@ -514,11 +500,11 @@ function App() {
                 </div>
                 <button 
                   className="btn-icon success" 
-                  title="WhatsApp"
-                  style={{ width: 'auto', padding: '0 1rem', borderRadius: '2rem', gap: '0.5rem', borderColor: '#25D366', color: '#25D366' }}
-                  onClick={() => sendWhatsApp(c)}
+                  title="Enviar SMS"
+                  style={{ width: 'auto', padding: '0 1rem', borderRadius: '2rem', gap: '0.5rem' }}
+                  onClick={() => sendSMS(c)}
                 >
-                  <MessageCircle size={16} /> <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>WhatsApp</span>
+                  <Send size={16} /> <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>Notificar</span>
                 </button>
               </div>
             ))}
@@ -639,9 +625,7 @@ function App() {
                     <button className="btn-icon primary" title="Enviar SMS" onClick={() => sendSMS(customer)}>
                       <Send size={18} />
                     </button>
-                    <button className="btn-icon" title="Notificar via WhatsApp" onClick={() => sendWhatsApp(customer)} style={{ borderColor: '#25D366', color: '#25D366', background: 'rgba(37, 211, 102, 0.05)' }}>
-                      <MessageCircle size={18} />
-                    </button>
+
                     <button className="btn-icon success" title="Sentar Cliente" onClick={() => updateStatus(customer.id, 'seated')}>
                       <CheckCircle2 size={18} />
                     </button>

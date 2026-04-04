@@ -68,7 +68,7 @@ function KioskMode({ companyId, companyName, userEmail, onExit }) {
         .from('customers')
         .select('*', { count: 'exact', head: true })
         .eq('company_id', companyId)
-        .eq('status', 'waiting')
+        .in('status', ['waiting', 'notified'])
         .gte('created_at', today.toISOString());
 
       setWaitingCount(count || 0);
@@ -205,7 +205,7 @@ function KioskMode({ companyId, companyName, userEmail, onExit }) {
           </div>
 
           <p style={{ fontSize: '1rem', color: 'rgba(255,255,255,0.6)', marginTop: '2rem' }}>
-            Será notificado quando a sua mesa estiver pronta.
+            Será notificado por SMS quando a sua mesa estiver pronta.
           </p>
 
           <div style={styles.countdownBar}>
