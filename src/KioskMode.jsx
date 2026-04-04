@@ -212,15 +212,15 @@ function KioskMode({ companyId, companyName, userEmail, onExit }) {
           <div style={styles.logoIcon}>
             <Users size={36} color="white" />
           </div>
-          <h1 style={{ fontSize: '2.2rem', margin: '1rem 0 0.5rem', color: 'white', fontWeight: 700 }}>{companyName}</h1>
-          <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '1.1rem' }}>Registe-se na Fila de Espera</p>
+          <h1 style={{ fontSize: '1.8rem', margin: '0.75rem 0 0.25rem', color: 'white', fontWeight: 700 }}>{companyName}</h1>
+          <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '1rem' }}>Registe-se na Fila de Espera</p>
         </div>
 
         {/* Contador de espera */}
-        <div style={{ ...styles.waitingBadge, padding: '1rem', fontSize: '1.1rem' }}>
-          <Users size={22} style={{ color: 'var(--primary)' }} />
+        <div style={{ ...styles.waitingBadge, padding: '0.75rem 1rem', fontSize: '0.95rem', marginBottom: '1.5rem' }}>
+          <Users size={18} style={{ color: 'var(--primary)' }} />
           <span>
-            Neste momento, <strong style={{ color: 'var(--primary)', fontSize: '1.4rem' }}>{waitingCount}</strong> {waitingCount === 1 ? 'cliente está' : 'clientes estão'} à espera
+            Neste momento, <strong style={{ color: 'var(--primary)', fontSize: '1.2rem' }}>{waitingCount}</strong> {waitingCount === 1 ? 'cliente está' : 'clientes estão'} à espera
           </span>
         </div>
 
@@ -239,9 +239,9 @@ function KioskMode({ companyId, companyName, userEmail, onExit }) {
                 onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                 onBlur={handlePhoneBlur}
               />
-              <Search size={22} style={{ position: 'absolute', right: '1.25rem', top: '1rem', color: 'rgba(255,255,255,0.3)' }} />
+              <Search size={20} style={{ position: 'absolute', right: '1rem', top: '0.85rem', color: 'rgba(255,255,255,0.3)' }} />
             </div>
-            <p style={{ ...styles.hint, fontSize: '0.8rem' }}>Se já nos visitou, os seus dados serão preenchidos automaticamente.</p>
+            <p style={{ ...styles.hint, fontSize: '0.75rem' }}>Se já nos visitou, os seus dados serão preenchidos automaticamente.</p>
           </div>
 
           {/* Nome */}
@@ -271,10 +271,10 @@ function KioskMode({ companyId, companyName, userEmail, onExit }) {
           </div>
 
           {/* Adultos & Crianças */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
             <div style={styles.formGroup}>
               <label className="kiosk-label">
-                <Users size={18} style={{ verticalAlign: 'middle', marginRight: '0.6rem' }} />
+                <Users size={16} style={{ verticalAlign: 'middle', marginRight: '0.5rem' }} />
                 Adultos
               </label>
               <input
@@ -284,12 +284,12 @@ function KioskMode({ companyId, companyName, userEmail, onExit }) {
                 required
                 value={formData.adults}
                 onChange={(e) => setFormData({ ...formData, adults: e.target.value })}
-                style={{ textAlign: 'center', fontSize: '1.5rem', fontWeight: 700 }}
+                style={{ textAlign: 'center', fontSize: '1.3rem', fontWeight: 700 }}
               />
             </div>
             <div style={styles.formGroup}>
               <label className="kiosk-label">
-                <Baby size={18} style={{ verticalAlign: 'middle', marginRight: '0.6rem' }} />
+                <Baby size={16} style={{ verticalAlign: 'middle', marginRight: '0.5rem' }} />
                 Crianças
               </label>
               <input
@@ -299,7 +299,7 @@ function KioskMode({ companyId, companyName, userEmail, onExit }) {
                 required
                 value={formData.children}
                 onChange={(e) => setFormData({ ...formData, children: e.target.value })}
-                style={{ textAlign: 'center', fontSize: '1.5rem', fontWeight: 700 }}
+                style={{ textAlign: 'center', fontSize: '1.3rem', fontWeight: 700 }}
               />
             </div>
           </div>
@@ -309,9 +309,9 @@ function KioskMode({ companyId, companyName, userEmail, onExit }) {
             type="submit"
             disabled={submitting}
             className="btn btn-primary"
-            style={{ ...styles.submitBtn, padding: '1.4rem', fontSize: '1.2rem', borderRadius: '1rem' }}
+            style={{ ...styles.submitBtn, padding: '1.2rem', fontSize: '1.1rem', borderRadius: '0.75rem', marginTop: '0.5rem' }}
           >
-            <UserPlus size={24} />
+            <UserPlus size={22} />
             {submitting ? 'A registar...' : 'Entrar na Fila'}
           </button>
         </form>
@@ -403,9 +403,9 @@ const styles = {
     display: 'flex',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: '1rem',
+    padding: '0.5rem',
     zIndex: 9999,
-    overflow: 'auto'
+    overflow: 'hidden'
   },
   formContainer: {
     width: '100%',
@@ -454,15 +454,15 @@ const styles = {
     transition: 'width 1s linear'
   },
   logoIcon: {
-    width: '72px',
-    height: '72px',
+    width: '60px',
+    height: '60px',
     borderRadius: '50%',
     background: 'linear-gradient(135deg, var(--primary), var(--accent))',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     margin: '0 auto',
-    boxShadow: '0 10px 30px rgba(99, 102, 241, 0.3)'
+    boxShadow: '0 8px 24px rgba(99, 102, 241, 0.3)'
   },
   waitingBadge: {
     display: 'flex',

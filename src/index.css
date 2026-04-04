@@ -303,41 +303,38 @@ h1, h2, h3 {
 }
 
 .kiosk-container {
-  width: 100%;
-  max-width: 720px; /* Reduzido de 850px para um equilíbrio perfeito */
+  width: 95%; /* Flexível em ecrãs pequenos */
+  max-width: 600px; /* Redução drástica para caber em qualquer monitor */
   background: rgba(30, 41, 59, 0.7);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 2rem;
-  padding: 2.5rem 2rem; /* Reduzido de 4rem para ocupar menos espaço vertical */
+  border-radius: 1.5rem;
+  padding: 1.5rem 1.75rem; /* Muito mais compacto verticalmente */
   box-shadow: 0 25px 60px rgba(0, 0, 0, 0.5);
+  margin: auto;
 }
 
 .kiosk-input {
-  font-size: 1.2rem !important; /* Reduzido de 1.5rem para não ser exagerado */
-  padding: 1rem 1.25rem !important;
+  font-size: 1.1rem !important; /* Tamanho profissional equilibrado */
+  padding: 0.8rem 1rem !important;
   height: auto !important;
 }
 
 .kiosk-label {
-  font-size: 1rem !important;
-  margin-bottom: 0.5rem !important;
+  font-size: 0.95rem !important;
+  margin-bottom: 0.35rem !important;
 }
 
 @media (max-width: 768px) {
   .kiosk-container {
-    padding: 1.5rem 1.25rem;
-    border-radius: 1.5rem;
-  }
-  
-  .kiosk-input {
-    font-size: 1.1rem !important;
+    padding: 1.25rem 1rem;
+    border-radius: 1rem;
   }
 }
 
 @media (min-width: 1024px) {
   .kiosk-container {
-    max-width: 780px; /* Estabilidade total em ecrãs largos */
+    max-width: 620px; /* Estabilidade total */
   }
 }
