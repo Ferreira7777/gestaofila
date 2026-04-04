@@ -218,6 +218,27 @@ function App() {
     isSubmittingRef.current = true;
     setSubmitting(true);
     try {
+      // Verificar se o cliente já está na fila (em espera ou notificado)
+      if (formData.phone) {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const { data: existing } = await supabase
+          .from('customers')
+          .select('id, status')
+          .eq('company_id', companyId)
+          .eq('phone_number', formData.phone)
+          .in('status', ['waiting', 'notified'])
+          .gte('created_at', today.toISOString())
+          .limit(1);
+
+        if (existing && existing.length > 0) {
+          alert('Este cliente já se encontra na fila de espera ou foi notificado. Não é possível registá-lo novamente.');
+          isSubmittingRef.current = false;
+          setSubmitting(false);
+          return;
+        }
+      }
+
       const { data, error } = await supabase.from('customers').insert([{
         first_name: formData.firstName,
         last_name: formData.lastName,
