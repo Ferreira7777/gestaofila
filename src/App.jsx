@@ -18,6 +18,7 @@ function App() {
   const [showModal, setShowModal] = useState(false);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState('queue'); // 'queue' | 'history'
+  const [statusFilter, setStatusFilter] = useState(null); // 'waiting' | 'notified' | 'seated'
   
   const [formData, setFormData] = useState({
     firstName: '',
@@ -596,15 +597,48 @@ function App() {
       <>
       {/* Stats Overview */}
       <div className="stats-grid">
-        <div className="glass" style={{ padding: '1.5rem' }}>
+        <div 
+          className="glass" 
+          style={{ 
+            padding: '1.5rem', 
+            cursor: 'pointer',
+            border: statusFilter === 'waiting' ? '1px solid var(--primary)' : '1px solid var(--border-color)',
+            boxShadow: statusFilter === 'waiting' ? '0 0 15px rgba(99, 102, 241, 0.2)' : 'none',
+            transform: statusFilter === 'waiting' ? 'translateY(-2px)' : 'none',
+            transition: 'all 0.2s ease'
+          }}
+          onClick={() => setStatusFilter(prev => prev === 'waiting' ? null : 'waiting')}
+        >
           <p style={{ color: 'var(--text-dim)', fontSize: '0.875rem' }}>Em Espera</p>
           <p style={{ fontSize: '2rem', fontWeight: '700' }}>{customers.filter(c => c.status === 'waiting').length}</p>
         </div>
-        <div className="glass" style={{ padding: '1.5rem' }}>
+        <div 
+          className="glass" 
+          style={{ 
+            padding: '1.5rem', 
+            cursor: 'pointer',
+            border: statusFilter === 'notified' ? '1px solid var(--primary)' : '1px solid var(--border-color)',
+            boxShadow: statusFilter === 'notified' ? '0 0 15px rgba(99, 102, 241, 0.2)' : 'none',
+            transform: statusFilter === 'notified' ? 'translateY(-2px)' : 'none',
+            transition: 'all 0.2s ease'
+          }}
+          onClick={() => setStatusFilter(prev => prev === 'notified' ? null : 'notified')}
+        >
           <p style={{ color: 'var(--text-dim)', fontSize: '0.875rem' }}>Notificados</p>
           <p style={{ fontSize: '2rem', fontWeight: '700', color: 'var(--primary)' }}>{customers.filter(c => c.status === 'notified').length}</p>
         </div>
-        <div className="glass" style={{ padding: '1.5rem' }}>
+        <div 
+          className="glass" 
+          style={{ 
+            padding: '1.5rem', 
+            cursor: 'pointer',
+            border: statusFilter === 'seated' ? '1px solid var(--success)' : '1px solid var(--border-color)',
+            boxShadow: statusFilter === 'seated' ? '0 0 15px rgba(16, 185, 129, 0.2)' : 'none',
+            transform: statusFilter === 'seated' ? 'translateY(-2px)' : 'none',
+            transition: 'all 0.2s ease'
+          }}
+          onClick={() => setStatusFilter(prev => prev === 'seated' ? null : 'seated')}
+        >
           <p style={{ color: 'var(--text-dim)', fontSize: '0.875rem' }}>Sentados Hoje</p>
           <p style={{ fontSize: '2rem', fontWeight: '700', color: 'var(--success)' }}>{customers.filter(c => c.status === 'seated').length}</p>
         </div>
@@ -616,7 +650,10 @@ function App() {
       ) : (
         <div className="queue-grid">
           {(() => {
-            const items = customers.filter(c => viewMode === 'history' ? true : (c.status !== 'seated' && c.status !== 'cancelled'));
+            const items = customers.filter(c => {
+              if (statusFilter) return c.status === statusFilter;
+              return viewMode === 'history' ? true : (c.status !== 'seated' && c.status !== 'cancelled');
+            });
             // Deduplicação absoluta no render para evitar quebra do DOM se as keys forem repetidas
             const uniqueItems = Array.from(new Map(items.map(item => [item.id, item])).values());
             
@@ -686,7 +723,10 @@ function App() {
                 </div>
               ));
           })()}
-          {customers.filter(c => viewMode === 'history' ? true : (c.status !== 'seated' && c.status !== 'cancelled')).length === 0 && (
+          {customers.filter(c => {
+            if (statusFilter) return c.status === statusFilter;
+            return viewMode === 'history' ? true : (c.status !== 'seated' && c.status !== 'cancelled');
+          }).length === 0 && (
             <div className="glass" style={{ gridColumn: '1 / -1', padding: '4rem', textAlign: 'center', borderStyle: 'dashed' }}>
               <p style={{ color: 'var(--text-dim)' }}>
                 {viewMode === 'history' ? 'Ainda não existem clientes no histórico.' : 'A fila está vazia. Comece por registar um novo cliente.'}
