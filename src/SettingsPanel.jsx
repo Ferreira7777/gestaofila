@@ -69,6 +69,19 @@ function SettingsPanel({
                 <p style={{ fontSize: '0.75rem', color: 'var(--text-dim)', margin: 0 }}>Envio imediato em segundo plano. Requer conta Twilio e saldo. Não precisa de sair da app.</p>
               </div>
             </label>
+
+            <label className={`glass ${smsMethod === 'native' ? 'border-primary' : ''}`} style={{ padding: '1rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '1rem', border: '1px solid var(--border-color)' }}>
+              <input 
+                type="radio" 
+                name="sms_method" 
+                checked={smsMethod === 'native'} 
+                onChange={() => handleSmsMethodChange('native')}
+              />
+              <div>
+                <p style={{ fontWeight: 600, margin: 0 }}>Android Nativo In-App (Silencioso)</p>
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-dim)', margin: 0 }}>Apenas na versão APK. Envia escondido pelo teu cartão de comunicações sem custos extras de API.</p>
+              </div>
+            </label>
           </div>
         </div>
 
