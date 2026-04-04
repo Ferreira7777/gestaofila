@@ -304,40 +304,40 @@ h1, h2, h3 {
 
 .kiosk-container {
   width: 100%;
-  max-width: 850px; /* Aumentado para melhor visibilidade em Tablet */
+  max-width: 720px; /* Reduzido de 850px para um equilíbrio perfeito */
   background: rgba(30, 41, 59, 0.7);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 2.5rem;
-  padding: 4rem 3rem;
+  border-radius: 2rem;
+  padding: 2.5rem 2rem; /* Reduzido de 4rem para ocupar menos espaço vertical */
   box-shadow: 0 25px 60px rgba(0, 0, 0, 0.5);
 }
 
 .kiosk-input {
-  font-size: 1.5rem !important; /* Maior para tablets */
-  padding: 1.25rem 1.5rem !important;
+  font-size: 1.2rem !important; /* Reduzido de 1.5rem para não ser exagerado */
+  padding: 1rem 1.25rem !important;
   height: auto !important;
 }
 
 .kiosk-label {
-  font-size: 1.1rem !important;
-  margin-bottom: 0.75rem !important;
+  font-size: 1rem !important;
+  margin-bottom: 0.5rem !important;
 }
 
 @media (max-width: 768px) {
   .kiosk-container {
-    padding: 2rem 1.5rem;
+    padding: 1.5rem 1.25rem;
     border-radius: 1.5rem;
   }
   
   .kiosk-input {
-    font-size: 1.2rem !important;
+    font-size: 1.1rem !important;
   }
 }
 
 @media (min-width: 1024px) {
   .kiosk-container {
-    max-width: 950px;
+    max-width: 780px; /* Estabilidade total em ecrãs largos */
   }
 }
