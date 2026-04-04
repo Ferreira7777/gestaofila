@@ -282,6 +282,62 @@ h1, h2, h3 {
   .glass {
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
-    background: rgba(30, 41, 59, 0.98) !important; /* Quase sólido para máxima limpeza gráfica */
+    background: rgba(30, 41, 59, 1) !important; /* Quase sólido para máxima limpeza gráfica */
+  }
+}
+
+/* Kiosk Specific Responsive Styles */
+.kiosk-full-screen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 2rem;
+  z-index: 9999;
+  overflow-y: auto;
+}
+
+.kiosk-container {
+  width: 100%;
+  max-width: 850px; /* Aumentado para melhor visibilidade em Tablet */
+  background: rgba(30, 41, 59, 0.7);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 2.5rem;
+  padding: 4rem 3rem;
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.5);
+}
+
+.kiosk-input {
+  font-size: 1.5rem !important; /* Maior para tablets */
+  padding: 1.25rem 1.5rem !important;
+  height: auto !important;
+}
+
+.kiosk-label {
+  font-size: 1.1rem !important;
+  margin-bottom: 0.75rem !important;
+}
+
+@media (max-width: 768px) {
+  .kiosk-container {
+    padding: 2rem 1.5rem;
+    border-radius: 1.5rem;
+  }
+  
+  .kiosk-input {
+    font-size: 1.2rem !important;
+  }
+}
+
+@media (min-width: 1024px) {
+  .kiosk-container {
+    max-width: 950px;
   }
 }
