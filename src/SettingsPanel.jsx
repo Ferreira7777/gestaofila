@@ -16,49 +16,9 @@ function SettingsPanel({
         <Settings className="text-primary" /> Configurações do Sistema
       </h2>
       <div className="glass" style={{ padding: '2rem', background: 'rgba(255,255,255,0.02)' }}>
-        <h3 style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <Link size={18} /> Módulo de Auto-Check-in (Público)
-        </h3>
-        <p style={{ color: 'var(--text-dim)', marginBottom: '1.5rem', fontSize: '0.95rem' }}>
-          Partilhe este link ou gere um QR Code para que os seus clientes se possam registar na fila de espera autonomamente.
-        </p>
-        
-        <div style={{ background: 'rgba(0,0,0,0.2)', padding: '1rem', borderRadius: '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid var(--border-color)' }}>
-          <code style={{ fontSize: '0.85rem', color: 'var(--primary)', wordBreak: 'break-all' }}>
-            {window.location.origin}/?reg={companyId}
-          </code>
-          <button className="btn" style={{ fontSize: '0.75rem', padding: '0.5rem 1rem' }} onClick={() => {
-            navigator.clipboard.writeText(`${window.location.origin}/?reg=${companyId}`);
-            alert('Link copiado!');
-          }}>
-            Copiar Link
-          </button>
-        </div>
 
-        <div style={{ marginTop: '2rem', padding: '2rem', border: '1px solid var(--border-color)', borderRadius: '1.5rem', textAlign: 'center', background: 'rgba(255,255,255,0.03)' }}>
-          <p style={{ fontSize: '1rem', color: 'var(--text-main)', marginBottom: '1.5rem', fontWeight: 600 }}>O seu QR Code de Check-in:</p>
-          <div style={{ background: 'white', padding: '1rem', display: 'inline-block', borderRadius: '1rem', boxShadow: '0 10px 30px rgba(0,0,0,0.5)', marginBottom: '1.5rem' }}>
-            <img 
-              src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&margin=10&data=${encodeURIComponent(`${window.location.origin}/?reg=${companyId}`)}`}
-              alt="QR Code"
-              style={{ display: 'block', width: '200px', height: '200px' }}
-            />
-          </div>
-          <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
-            <button 
-              className="btn" 
-              style={{ background: 'var(--success)', color: 'white', fontSize: '0.875rem' }} 
-              onClick={() => window.open(`https://api.qrserver.com/v1/create-qr-code/?size=1000x1000&margin=10&data=${encodeURIComponent(`${window.location.origin}/?reg=${companyId}`)}`, '_blank')}
-            >
-              Abrir QR Code (Alta Qualidade)
-            </button>
-          </div>
-          <p style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginTop: '1rem' }}>
-            Dica: Pode imprimir esta imagem e colocá-la na receção para os clientes lerem.
-          </p>
-        </div>
-        
-        <div style={{ marginTop: '2rem', padding: '2rem', background: 'rgba(255,255,255,0.03)', borderRadius: '1rem', border: '1px solid var(--border-color)' }}>
+        {/* 1. Método de Notificação */}
+        <div style={{ padding: '2rem', background: 'rgba(255,255,255,0.03)', borderRadius: '1rem', border: '1px solid var(--border-color)' }}>
           <h3 style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <Send size={18} /> Método de Notificação (Este Dispositivo)
           </h3>
@@ -108,6 +68,7 @@ function SettingsPanel({
           </div>
         </div>
 
+        {/* 2. Fecho do Dia */}
         <div style={{ marginTop: '2rem', padding: '2rem', background: 'rgba(255,255,255,0.03)', borderRadius: '1rem', border: '1px solid var(--border-color)' }}>
           <h3 style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <Clock size={18} /> Fecho do Dia / Reinício da Fila
@@ -128,7 +89,8 @@ function SettingsPanel({
             </span>
           </div>
         </div>
-        
+
+        {/* 3. Identidade Visual */}
         <div style={{ marginTop: '2rem', padding: '2rem', background: 'rgba(255,255,255,0.03)', borderRadius: '1rem', border: '1px solid var(--border-color)' }}>
           <h3 style={{ marginBottom: '1rem' }}>Identidade Visual</h3>
           <p style={{ color: 'var(--text-dim)', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
@@ -161,6 +123,51 @@ function SettingsPanel({
           </div>
         </div>
 
+        {/* 4. Módulo de Auto-Check-in */}
+        <div style={{ marginTop: '2rem', padding: '2rem', background: 'rgba(255,255,255,0.03)', borderRadius: '1rem', border: '1px solid var(--border-color)' }}>
+          <h3 style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <Link size={18} /> Módulo de Auto-Check-in (Público)
+          </h3>
+          <p style={{ color: 'var(--text-dim)', marginBottom: '1.5rem', fontSize: '0.95rem' }}>
+            Partilhe este link ou gere um QR Code para que os seus clientes se possam registar na fila de espera autonomamente.
+          </p>
+          
+          <div style={{ background: 'rgba(0,0,0,0.2)', padding: '1rem', borderRadius: '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid var(--border-color)' }}>
+            <code style={{ fontSize: '0.85rem', color: 'var(--primary)', wordBreak: 'break-all' }}>
+              {window.location.origin}/?reg={companyId}
+            </code>
+            <button className="btn" style={{ fontSize: '0.75rem', padding: '0.5rem 1rem' }} onClick={() => {
+              navigator.clipboard.writeText(`${window.location.origin}/?reg=${companyId}`);
+              alert('Link copiado!');
+            }}>
+              Copiar Link
+            </button>
+          </div>
+        </div>
+
+        {/* 5. QR Code de Check-in */}
+        <div style={{ marginTop: '2rem', padding: '2rem', border: '1px solid var(--border-color)', borderRadius: '1.5rem', textAlign: 'center', background: 'rgba(255,255,255,0.03)' }}>
+          <p style={{ fontSize: '1rem', color: 'var(--text-main)', marginBottom: '1.5rem', fontWeight: 600 }}>O seu QR Code de Check-in:</p>
+          <div style={{ background: 'white', padding: '1rem', display: 'inline-block', borderRadius: '1rem', boxShadow: '0 10px 30px rgba(0,0,0,0.5)', marginBottom: '1.5rem' }}>
+            <img 
+              src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&margin=10&data=${encodeURIComponent(`${window.location.origin}/?reg=${companyId}`)}`}
+              alt="QR Code"
+              style={{ display: 'block', width: '200px', height: '200px' }}
+            />
+          </div>
+          <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+            <button 
+              className="btn" 
+              style={{ background: 'var(--success)', color: 'white', fontSize: '0.875rem' }} 
+              onClick={() => window.open(`https://api.qrserver.com/v1/create-qr-code/?size=1000x1000&margin=10&data=${encodeURIComponent(`${window.location.origin}/?reg=${companyId}`)}`, '_blank')}
+            >
+              Abrir QR Code (Alta Qualidade)
+            </button>
+          </div>
+          <p style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginTop: '1rem' }}>
+            Dica: Pode imprimir esta imagem e colocá-la na receção para os clientes lerem.
+          </p>
+        </div>
 
       </div>
     </div>
