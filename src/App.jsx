@@ -174,15 +174,14 @@ function App() {
         filter: `company_id=eq.${companyId}`
       }, (payload) => {
         if (payload.eventType === 'INSERT') {
-          setCustomers(prev => {
-            // Evitar duplicados se a inserção manual já tiver adicionado o registo
-            if (prev.find(c => c.id === payload.new.id)) return prev;
-            return [...prev, payload.new];
-          });
+          setCustomers(prev => prev.find(c => c.id === payload.new.id) ? prev : [...prev, payload.new]);
+          setAllClients(prev => prev.find(c => c.id === payload.new.id) ? prev : [payload.new, ...prev]);
         } else if (payload.eventType === 'UPDATE') {
           setCustomers(prev => prev.map(c => c.id === payload.new.id ? payload.new : c));
+          setAllClients(prev => prev.map(c => c.id === payload.new.id ? payload.new : c));
         } else if (payload.eventType === 'DELETE') {
           setCustomers(prev => prev.filter(c => c.id === payload.old.id));
+          setAllClients(prev => prev.filter(c => c.id === payload.old.id));
         }
       })
       .subscribe();
@@ -547,10 +546,14 @@ function App() {
       
       if (error) throw error;
       
+      const updatedCustomer = { ...editingClient, first_name: editFormData.firstName, last_name: editFormData.lastName, phone_number: editFormData.phone };
+
       setCustomers(prev => prev.map(c => 
-        c.phone_number === editingClient.phone_number 
-        ? { ...c, first_name: editFormData.firstName, last_name: editFormData.lastName, phone_number: editFormData.phone } 
-        : c
+        c.phone_number === editingClient.phone_number ? { ...c, ...updatedCustomer } : c
+      ));
+
+      setAllClients(prev => prev.map(c => 
+        c.phone_number === editingClient.phone_number ? { ...c, ...updatedCustomer } : c
       ));
       
       setEditingClient(null);
@@ -584,6 +587,44 @@ function App() {
       ? `${bulkMessage}\n\n📷 Ver imagem: ${marketingImageUrl}\n\n${companyName}`
       : `${bulkMessage}\n\n${companyName}`;
 
+    let globalSelectedApp = 'com.whatsapp';
+    let globalBase64Content = null;
+    let isNativeWA = Capacitor.isNativePlatform() && window.Capacitor?.Plugins?.NativeWhatsApp && messageChannel === 'whatsapp';
+
+    if (isNativeWA) {
+      try {
+        const NativeWA = window.Capacitor.Plugins.NativeWhatsApp;
+        const { whatsapp, whatsappBusiness } = await NativeWA.checkInstalledApps();
+        
+        if (whatsapp && whatsappBusiness) {
+          const pickedApp = await promptAppPicker();
+          if (!pickedApp) {
+            setLoading(false);
+            return; // Aborta envio pois user cancelou
+          }
+          globalSelectedApp = pickedApp;
+        } else if (whatsappBusiness && !whatsapp) {
+          globalSelectedApp = 'com.whatsapp.w4b';
+        } else if (!whatsapp && !whatsappBusiness) {
+          isNativeWA = false; // Fallback para web
+        }
+
+        if (isNativeWA && marketingImageUrl) {
+          const response = await fetch(marketingImageUrl);
+          const blob = await response.blob();
+          const reader = new FileReader();
+          const base64Data = await new Promise((resolve) => {
+            reader.onloadend = () => resolve(reader.result);
+            reader.readAsDataURL(blob);
+          });
+          globalBase64Content = base64Data.split(',')[1];
+        }
+      } catch (e) {
+        console.warn('Erro ao inicializar plugin WA Nativo', e);
+        isNativeWA = false;
+      }
+    }
+
     for (const phone of selectedClients) {
       const customer = getUniqueCustomers().find(c => c.phone_number === phone);
       if (!customer) continue;
@@ -593,54 +634,27 @@ function App() {
           const caption = `${bulkMessage}\n\n${companyName}`;
 
           // CASE 1: Android Nativo (APK) - Nova Integração WhatsApp Nível Premium
-          if (Capacitor.isNativePlatform() && window.Capacitor?.Plugins?.NativeWhatsApp) {
+          if (isNativeWA) {
             try {
               const NativeWA = window.Capacitor.Plugins.NativeWhatsApp;
               
-              // Verifica se ambas existem
-              const { whatsapp, whatsappBusiness } = await NativeWA.checkInstalledApps();
-              let selectedApp = 'com.whatsapp';
-              
-              if (whatsapp && whatsappBusiness) {
-                // Suspende ate utilizador selecionar
-                selectedApp = await promptAppPicker();
-                if (!selectedApp) {
-                  // Utilizador fechou/cancelou
-                  successCount++; 
-                  continue; 
-                }
-              } else if (whatsappBusiness && !whatsapp) {
-                selectedApp = 'com.whatsapp.w4b';
-              } else if (!whatsapp && !whatsappBusiness) {
-                throw new Error("Nenhum WhatsApp instalado.");
-              }
-
-              let base64Content = null;
-              if (marketingImageUrl) {
-                const response = await fetch(marketingImageUrl);
-                const blob = await response.blob();
-                const reader = new FileReader();
-                const base64Data = await new Promise((resolve) => {
-                  reader.onloadend = () => resolve(reader.result);
-                  reader.readAsDataURL(blob);
-                });
-                base64Content = base64Data.split(',')[1];
-              }
-
-              // Só passar Target JID se for exatamente UM cliente selecionado, senão não preenche o jid e deixa utilizador selecionar lista no WhatsApp
-              const targetPhone = selectedClients.length === 1 ? phone : null;
-
               await NativeWA.shareWithAttachment({
-                phoneNumber: targetPhone,
+                phoneNumber: phone,
                 message: caption,
-                base64Image: base64Content,
-                appPackage: selectedApp
+                base64Image: globalBase64Content,
+                appPackage: globalSelectedApp
               });
               
               successCount++;
-              // Se tiver enviado via intent sem JID, ele já engloba todos. Paramos o loop
-              if (selectedClients.length > 1) {
-                break;
+              
+              // Se há mais clientes para processar, perguntamos ao utilizador se envia o próximo
+              const isLastClient = phone === selectedClients[selectedClients.length - 1];
+              if (!isLastClient) {
+                const proceed = window.confirm(`Mensagem preparada no WhatsApp.\n\nDepois de a enviar, certifique-se que voltou à Gestão de Fila.\n\nClique OK para preparar/disparar o envio para o PRÓXIMO cliente.`);
+                if (!proceed) {
+                  // Aborta o ciclo para não enviar aos restantes
+                  break; 
+                }
               }
               continue;
             } catch (nativeErr) {
@@ -651,6 +665,7 @@ function App() {
 
           // CASE 2: Android Antigo ou Fallback PWA Share...
 
+          let sharedViaPWA = false;
           if (marketingImageUrl && navigator.share) {
             try {
               const response = await fetch(marketingImageUrl);
@@ -664,28 +679,37 @@ function App() {
                   text: caption
                 });
                 successCount++;
-                continue;
+                sharedViaPWA = true;
               }
             } catch (pwaErr) {
               console.warn('Erro na partilha PWA:', pwaErr);
-              // Fallback para wa.me
+              // Fallback para wa.me continuará
             }
           }
 
           // CASE 3: Desktop ou Fallback (wa.me) - Link apenas
-          let cleanPhone = phone.replace(/\s+/g, '').replace('+', '');
-          if (cleanPhone.length === 9) cleanPhone = `351${cleanPhone}`;
-          
-          const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-          if (isMobile) {
-            // Protocolo direto para abrir a APP nativa sem abas intermédias
-            window.location.href = `whatsapp://send?phone=${cleanPhone}&text=${encodeURIComponent(finalMsg)}`;
-          } else {
-            // Fallback para Desktop
-            const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(finalMsg)}`;
-            window.open(waUrl, '_blank');
+          if (!sharedViaPWA) {
+            let cleanPhone = phone.replace(/\s+/g, '').replace('+', '');
+            if (cleanPhone.length === 9) cleanPhone = `351${cleanPhone}`;
+            
+            const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+            if (isMobile) {
+              // Protocolo direto para abrir a APP nativa sem abas intermédias
+              window.location.href = `whatsapp://send?phone=${cleanPhone}&text=${encodeURIComponent(finalMsg)}`;
+            } else {
+              // Fallback para Desktop
+              const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(finalMsg)}`;
+              window.open(waUrl, '_blank');
+            }
+            successCount++;
           }
-          successCount++;
+
+          // Pausa sequencial para o PWA / Desktop (igual ao nativo)
+          const isLastClient = phone === selectedClients[selectedClients.length - 1];
+          if (!isLastClient) {
+            const proceed = window.confirm(`Mensagem preparada.\n\nDepois de a enviar no WhatsApp, certifique-se que voltou a esta janela da Gestão de Fila.\n\nClique OK para preparar e abrir o PRÓXIMO cliente.`);
+            if (!proceed) break;
+          }
         } else {
           // Canal SMS
           if (smsMethod === 'twilio') {
@@ -1152,22 +1176,25 @@ function App() {
                   
                   <div style={{ flex: 1 }}>
                     {editingClient?.phone_number === c.phone_number ? (
-                      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.6rem' }}>
                         <input 
                           className="form-input" 
-                          style={{ flex: 1, padding: '0.4rem' }} 
+                          style={{ padding: '0.6rem' }} 
+                          placeholder="Primeiro Nome"
                           value={editFormData.firstName} 
                           onChange={(e) => setEditFormData({...editFormData, firstName: e.target.value})}
                         />
                         <input 
                           className="form-input" 
-                          style={{ flex: 1, padding: '0.4rem' }} 
+                          style={{ padding: '0.6rem' }} 
+                          placeholder="Último Nome"
                           value={editFormData.lastName} 
                           onChange={(e) => setEditFormData({...editFormData, lastName: e.target.value})}
                         />
                         <input 
                           className="form-input" 
-                          style={{ flex: 1, padding: '0.4rem' }} 
+                          style={{ padding: '0.6rem' }} 
+                          placeholder="Telemóvel"
                           value={editFormData.phone} 
                           onChange={(e) => setEditFormData({...editFormData, phone: e.target.value})}
                         />
