@@ -60,7 +60,14 @@ function App() {
   const [marketingImage, setMarketingImage] = useState(null);
   const [marketingImageUrl, setMarketingImageUrl] = useState(null);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
-
+  const [showClientMessageModal, setShowClientMessageModal] = useState(false);
+  const [showAppPicker, setShowAppPicker] = useState(false);
+  const [appPickerResolve, setAppPickerResolve] = useState(null);
+  
+  const promptAppPicker = () => new Promise(resolve => {
+    setAppPickerResolve(() => resolve);
+    setShowAppPicker(true);
+  });
 
   // Estado para Check-in Público
   const [regId, setRegId] = useState(null);
@@ -585,46 +592,65 @@ function App() {
         if (messageChannel === 'whatsapp') {
           const caption = `${bulkMessage}\n\n${companyName}`;
 
-          // CASE 1: Android Nativo (APK) - Partilha Real com Ficheiro
-          if (Capacitor.isNativePlatform() && marketingImageUrl) {
+          // CASE 1: Android Nativo (APK) - Nova Integração WhatsApp Nível Premium
+          if (Capacitor.isNativePlatform() && window.Capacitor?.Plugins?.NativeWhatsApp) {
             try {
-              const response = await fetch(marketingImageUrl);
-              const blob = await response.blob();
+              const NativeWA = window.Capacitor.Plugins.NativeWhatsApp;
               
-              // Converter Blob para Base64 para o Filesystem do Android
-              const reader = new FileReader();
-              const base64Data = await new Promise((resolve) => {
-                reader.onloadend = () => resolve(reader.result);
-                reader.readAsDataURL(blob);
-              });
-              const base64Content = (base64Data).split(',')[1];
-
-              // Guardar temp e partilhar
-              await Filesystem.writeFile({
-                path: 'mkt_temp.jpg',
-                data: base64Content,
-                directory: Directory.Cache
-              });
+              // Verifica se ambas existem
+              const { whatsapp, whatsappBusiness } = await NativeWA.checkInstalledApps();
+              let selectedApp = 'com.whatsapp';
               
-              const { uri } = await Filesystem.getUri({
-                path: 'mkt_temp.jpg',
-                directory: Directory.Cache
-              });
+              if (whatsapp && whatsappBusiness) {
+                // Suspende ate utilizador selecionar
+                selectedApp = await promptAppPicker();
+                if (!selectedApp) {
+                  // Utilizador fechou/cancelou
+                  successCount++; 
+                  continue; 
+                }
+              } else if (whatsappBusiness && !whatsapp) {
+                selectedApp = 'com.whatsapp.w4b';
+              } else if (!whatsapp && !whatsappBusiness) {
+                throw new Error("Nenhum WhatsApp instalado.");
+              }
 
-              await Share.share({
-                files: [uri],
-                text: caption
+              let base64Content = null;
+              if (marketingImageUrl) {
+                const response = await fetch(marketingImageUrl);
+                const blob = await response.blob();
+                const reader = new FileReader();
+                const base64Data = await new Promise((resolve) => {
+                  reader.onloadend = () => resolve(reader.result);
+                  reader.readAsDataURL(blob);
+                });
+                base64Content = base64Data.split(',')[1];
+              }
+
+              // Só passar Target JID se for exatamente UM cliente selecionado, senão não preenche o jid e deixa utilizador selecionar lista no WhatsApp
+              const targetPhone = selectedClients.length === 1 ? phone : null;
+
+              await NativeWA.shareWithAttachment({
+                phoneNumber: targetPhone,
+                message: caption,
+                base64Image: base64Content,
+                appPackage: selectedApp
               });
               
               successCount++;
+              // Se tiver enviado via intent sem JID, ele já engloba todos. Paramos o loop
+              if (selectedClients.length > 1) {
+                break;
+              }
               continue;
             } catch (nativeErr) {
-              console.warn('Erro na partilha nativa APK:', nativeErr);
-              // Fallback para wa.me
+              console.warn('Erro na partilha nativa APK Custom:', nativeErr);
+              // Fallback para wa.me continuará em baixo...
             }
           }
 
-          // CASE 2: PWA / Web Share (Mobile Browser) - Partilha Real com Ficheiro
+          // CASE 2: Android Antigo ou Fallback PWA Share...
+
           if (marketingImageUrl && navigator.share) {
             try {
               const response = await fetch(marketingImageUrl);
@@ -953,8 +979,11 @@ function App() {
             </div>
           </div>
 
-          {/* Bulk Messaging Panel */}
-          <div style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '1.5rem', padding: '1.5rem', marginBottom: '2.5rem' }}>
+          {/* Bulk Messaging Panel / Modal Cliente */}
+          {showClientMessageModal && (
+            <div className="modal-overlay">
+              <div className="glass modal-content" style={{ maxWidth: '600px', width: '90%', padding: '2rem' }}>
+          <div style={{ background: 'transparent', border: 'none', padding: '0', marginBottom: '0' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
               <h4 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.6rem', color: 'var(--primary)', fontSize: '1.1rem' }}>
                 <Send size={18} /> Campanhas de Marketing
@@ -1065,7 +1094,46 @@ function App() {
                 {messageChannel === 'whatsapp' ? <><MessageSquare size={18} /> Enviar WhatsApp</> : <><Send size={18} /> Enviar SMS</>}
               </button>
             </div>
+            <div style={{ marginTop: '1.5rem', textAlign: 'center' }}>
+               <button className="btn" onClick={() => setShowClientMessageModal(false)} style={{ background: 'rgba(255,255,255,0.1)', padding: '0.5rem 2rem' }}>Cancelar / Fechar</button>
+            </div>
           </div>
+          </div>
+          </div>
+          )}
+
+          {/* FAB for open Messaging Modal */}
+          <button 
+            onClick={() => setShowClientMessageModal(true)} 
+            style={{ 
+              position: 'fixed', 
+              bottom: '2rem', 
+              right: '2rem', 
+              zIndex: 900, 
+              padding: '1.2rem', 
+              borderRadius: '50%', 
+              background: 'var(--success)', 
+              color: 'white', 
+              boxShadow: '0 8px 16px rgba(0,0,0,0.4)',
+              border: 'none',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              transition: 'transform 0.2s ease'
+            }}
+            title="Enviar WhatsApp"
+            onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.1)'}
+            onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
+          >
+            <MessageSquare size={26} />
+            {selectedClients.length > 0 && (
+              <span style={{ position: 'absolute', top: '-5px', right: '-5px', background: 'var(--danger)', borderRadius: '50%', width: '20px', height: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem', fontWeight: 'bold' }}>
+                {selectedClients.length}
+              </span>
+            )}
+          </button>
+
 
           <div style={{ display: 'grid', gap: '0.75rem' }}>
             {clientsLoading ? (
@@ -1381,6 +1449,49 @@ function App() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* App Picker Modal (WhatsApp vs Business) */}
+      {showAppPicker && (
+        <div className="modal-overlay" style={{ zIndex: 9999 }}>
+          <div className="glass modal-content" style={{ maxWidth: '350px', textAlign: 'center' }}>
+            <h3 style={{ marginTop: 0, marginBottom: '1.5rem' }}>Qual WhatsApp abrir?</h3>
+            <p style={{ color: 'var(--text-dim)', marginBottom: '1.5rem', fontSize: '0.9rem' }}>
+              Foram detetadas as duas versões no dispositivo.
+            </p>
+            <div style={{ display: 'grid', gap: '1rem' }}>
+               <button 
+                  className="btn btn-primary" 
+                  onClick={() => {
+                    appPickerResolve('com.whatsapp');
+                    setShowAppPicker(false);
+                  }}
+               >
+                  WhatsApp Pessoal
+               </button>
+               <button 
+                  className="btn" 
+                  style={{ background: 'var(--success)', color: 'white' }}
+                  onClick={() => {
+                    appPickerResolve('com.whatsapp.w4b');
+                    setShowAppPicker(false);
+                  }}
+               >
+                  WhatsApp Business
+               </button>
+               <button 
+                  className="btn" 
+                  style={{ background: 'rgba(255,255,255,0.1)', marginTop: '0.5rem' }}
+                  onClick={() => {
+                    appPickerResolve(null);
+                    setShowAppPicker(false);
+                  }}
+               >
+                  Cancelar
+               </button>
+            </div>
           </div>
         </div>
       )}
