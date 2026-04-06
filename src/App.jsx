@@ -180,14 +180,31 @@ function App() {
           setCustomers(prev => prev.map(c => c.id === payload.new.id ? payload.new : c));
           setAllClients(prev => prev.map(c => c.id === payload.new.id ? payload.new : c));
         } else if (payload.eventType === 'DELETE') {
-          setCustomers(prev => prev.filter(c => c.id === payload.old.id));
-          setAllClients(prev => prev.filter(c => c.id === payload.old.id));
+          setCustomers(prev => prev.filter(c => c.id !== payload.old.id));
+          setAllClients(prev => prev.filter(c => c.id !== payload.old.id));
         }
       })
-      .subscribe();
+      .subscribe((status) => {
+        console.log('[Realtime] Status:', status);
+      });
+
+    // Polling de segurança: re-fetch a cada 15s como fallback caso o Realtime perca ligação
+    const pollingInterval = setInterval(() => {
+      fetchCustomers();
+    }, 15000);
+
+    // Watchdog: verificar se o canal está vivo a cada 30s e reconectar se necessário
+    const watchdog = setInterval(() => {
+      if (channel.state !== 'joined') {
+        console.warn('[Realtime] Canal desconectado, a reconectar...');
+        channel.subscribe();
+      }
+    }, 30000);
 
     return () => {
       supabase.removeChannel(channel);
+      clearInterval(pollingInterval);
+      clearInterval(watchdog);
     };
   }, [companyId, closingTime]);
 
