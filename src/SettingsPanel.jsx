@@ -34,6 +34,29 @@ function SettingsPanel({
             Copiar Link
           </button>
         </div>
+
+        <div style={{ marginTop: '2rem', padding: '2rem', border: '1px solid var(--border-color)', borderRadius: '1.5rem', textAlign: 'center', background: 'rgba(255,255,255,0.03)' }}>
+          <p style={{ fontSize: '1rem', color: 'var(--text-main)', marginBottom: '1.5rem', fontWeight: 600 }}>O seu QR Code de Check-in:</p>
+          <div style={{ background: 'white', padding: '1rem', display: 'inline-block', borderRadius: '1rem', boxShadow: '0 10px 30px rgba(0,0,0,0.5)', marginBottom: '1.5rem' }}>
+            <img 
+              src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&margin=10&data=${encodeURIComponent(`${window.location.origin}/?reg=${companyId}`)}`}
+              alt="QR Code"
+              style={{ display: 'block', width: '200px', height: '200px' }}
+            />
+          </div>
+          <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+            <button 
+              className="btn" 
+              style={{ background: 'var(--success)', color: 'white', fontSize: '0.875rem' }} 
+              onClick={() => window.open(`https://api.qrserver.com/v1/create-qr-code/?size=1000x1000&margin=10&data=${encodeURIComponent(`${window.location.origin}/?reg=${companyId}`)}`, '_blank')}
+            >
+              Abrir QR Code (Alta Qualidade)
+            </button>
+          </div>
+          <p style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginTop: '1rem' }}>
+            Dica: Pode imprimir esta imagem e colocá-la na receção para os clientes lerem.
+          </p>
+        </div>
         
         <div style={{ marginTop: '2rem', padding: '2rem', background: 'rgba(255,255,255,0.03)', borderRadius: '1rem', border: '1px solid var(--border-color)' }}>
           <h3 style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -138,28 +161,7 @@ function SettingsPanel({
           </div>
         </div>
 
-        <div style={{ marginTop: '2rem', padding: '2rem', border: '1px solid var(--border-color)', borderRadius: '1.5rem', textAlign: 'center', background: 'rgba(255,255,255,0.03)' }}>
-          <p style={{ fontSize: '1rem', color: 'var(--text-main)', marginBottom: '1.5rem', fontWeight: 600 }}>O seu QR Code de Check-in:</p>
-          <div style={{ background: 'white', padding: '1rem', display: 'inline-block', borderRadius: '1rem', boxShadow: '0 10px 30px rgba(0,0,0,0.5)', marginBottom: '1.5rem' }}>
-            <img 
-              src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&margin=10&data=${encodeURIComponent(`${window.location.origin}/?reg=${companyId}`)}`}
-              alt="QR Code"
-              style={{ display: 'block', width: '200px', height: '200px' }}
-            />
-          </div>
-          <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
-            <button 
-              className="btn" 
-              style={{ background: 'var(--success)', color: 'white', fontSize: '0.875rem' }} 
-              onClick={() => window.open(`https://api.qrserver.com/v1/create-qr-code/?size=1000x1000&margin=10&data=${encodeURIComponent(`${window.location.origin}/?reg=${companyId}`)}`, '_blank')}
-            >
-              Abrir QR Code (Alta Qualidade)
-            </button>
-          </div>
-          <p style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginTop: '1rem' }}>
-            Dica: Pode imprimir esta imagem e colocá-la na receção para os clientes lerem.
-          </p>
-        </div>
+
       </div>
     </div>
   );
