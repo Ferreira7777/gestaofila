@@ -123,13 +123,19 @@ function App() {
 
   const loadUserProfile = async (user) => {
     try {
+      setLoading(true);
       const { data, error } = await supabase
         .from('profiles')
         .select('company_id, companies(name, logo_url, closing_time)')
         .eq('id', user.id)
         .single();
         
-      if (!error && data) {
+      if (error || !data) {
+        // Se houver erro, forçar logout pois a sessão poderá estar corrompida
+        await supabase.auth.signOut();
+        setSession(null);
+        setCompanyId(null);
+      } else {
         setSession(user);
         setCompanyId(data.company_id);
         setCompanyName(data.companies.name);
@@ -140,6 +146,7 @@ function App() {
       }
     } catch (err) {
       console.error('Error loading profile:', err);
+      setSession(null);
     } finally {
       setLoading(false);
     }
@@ -758,7 +765,15 @@ function App() {
   };
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
+    try {
+      await supabase.auth.signOut();
+      localStorage.clear(); // Limpar caches de quiosque e sessões locais
+      setSession(null);
+      setCompanyId(null);
+      setCustomers([]);
+    } catch (err) {
+      console.error('Logout error:', err);
+    }
   };
 
   const getUniqueCustomers = () => {
