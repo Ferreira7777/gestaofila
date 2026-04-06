@@ -12,6 +12,8 @@
   "dependencies": {
     "@capacitor/android": "^8.3.0",
     "@capacitor/core": "^8.3.0",
+    "@capacitor/filesystem": "^8.1.2",
+    "@capacitor/share": "^8.0.1",
     "@supabase/supabase-js": "^2.100.0",
     "clsx": "^2.1.1",
     "cordova-plugin-sms": "^1.0.5",

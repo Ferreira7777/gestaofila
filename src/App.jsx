@@ -4,12 +4,14 @@ import Auth from './Auth';
 import { 
   Users, UserPlus, Baby, Clock, CheckCircle2, 
   Send, XCircle, LogOut, Plus, Search, Settings, Link, Tablet,
-  Trash2, Edit3, Check, X
+  Trash2, Edit3, Check, X, Image, MessageSquare
 } from 'lucide-react';
 import PublicCheckin from './PublicCheckin';
 import KioskMode from './KioskMode';
 import SettingsPanel from './SettingsPanel';
 import { Capacitor, registerPlugin } from '@capacitor/core';
+import { Share } from '@capacitor/share';
+import { Filesystem, Directory } from '@capacitor/filesystem';
 
 const NativeSms = Capacitor.isNativePlatform() ? registerPlugin('NativeSms') : null;
 
@@ -42,6 +44,22 @@ function App() {
   const [bulkMessage, setBulkMessage] = useState('');
   const [editingClient, setEditingClient] = useState(null); // { id, phone, first_name, last_name }
   const [editFormData, setEditFormData] = useState({ firstName: '', lastName: '', phone: '' });
+
+
+  // Estados para o Histórico Global
+  const [historyData, setHistoryData] = useState([]);
+  const [historySearch, setHistorySearch] = useState('');
+  const [historyDateFilter, setHistoryDateFilter] = useState('');
+  const [historyLoading, setHistoryLoading] = useState(false);
+
+  const [allClients, setAllClients] = useState([]);
+  const [clientsLoading, setClientsLoading] = useState(false);
+
+  // Estados para o WhatsApp Marketing
+  const [messageChannel, setMessageChannel] = useState('sms'); // 'sms' | 'whatsapp'
+  const [marketingImage, setMarketingImage] = useState(null);
+  const [marketingImageUrl, setMarketingImageUrl] = useState(null);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
 
 
   // Estado para Check-in Público
@@ -195,6 +213,101 @@ function App() {
     }
   };
 
+  const fetchHistory = async () => {
+    if (!companyId) return;
+    try {
+      setHistoryLoading(true);
+      let query = supabase
+        .from('customers')
+        .select('*')
+        .eq('company_id', companyId)
+        .order('created_at', { ascending: false })
+        .limit(200);
+
+      if (historySearch) {
+        // Pesquisa por nome ou apelido
+        query = query.or(`first_name.ilike.%${historySearch}%,last_name.ilike.%${historySearch}%`);
+      }
+
+      if (historyDateFilter) {
+        const start = new Date(historyDateFilter);
+        start.setHours(0, 0, 0, 0);
+        const end = new Date(historyDateFilter);
+        end.setHours(23, 59, 59, 999);
+        query = query.gte('created_at', start.toISOString()).lte('created_at', end.toISOString());
+      }
+
+      const { data, error } = await query;
+      if (error) throw error;
+      setHistoryData(data || []);
+    } catch (err) {
+      console.error('Erro no fetch do histórico:', err);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (viewMode === 'history') {
+      fetchHistory();
+    }
+  }, [viewMode, historySearch, historyDateFilter, companyId]);
+
+  const fetchGlobalClients = async () => {
+    if (!companyId) return;
+    try {
+      setClientsLoading(true);
+      // Carregar todos os registos para criar o CRM global
+      const { data, error } = await supabase
+        .from('customers')
+        .select('*')
+        .eq('company_id', companyId)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setAllClients(data || []);
+    } catch (err) {
+      console.error('Erro no fetch global de clientes:', err);
+    } finally {
+      setClientsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (viewMode === 'clients') {
+      fetchGlobalClients();
+    }
+  }, [viewMode, companyId]);
+
+  const handleMarketingImageUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file || !companyId) return;
+
+    try {
+      setIsUploadingImage(true);
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${companyId}/mkt_${Date.now()}.${fileExt}`;
+      
+      const { error: uploadError } = await supabase.storage
+        .from('marketing')
+        .upload(fileName, file);
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('marketing')
+        .getPublicUrl(fileName);
+
+      setMarketingImageUrl(publicUrl);
+      setMarketingImage(file);
+    } catch (err) {
+      alert('Erro ao carregar imagem:ifique-se que o bucket "marketing" existe no Supabase.');
+      console.error(err);
+    } finally {
+      setIsUploadingImage(false);
+    }
+  };
+
   const handlePhoneBlur = async () => {
     if (!formData.phone || formData.phone.length < 9) return;
     try {
@@ -226,24 +339,39 @@ function App() {
     isSubmittingRef.current = true;
     setSubmitting(true);
     try {
-      // Verificar se o cliente já está na fila (em espera ou notificado)
+      // Verificar se o cliente já está na fila (em espera ou notificado) em qualquer data
       if (formData.phone) {
+        const [closeHour, closeMinute] = (closingTime || '00:00').split(':').map(Number);
         const today = new Date();
-        today.setHours(0, 0, 0, 0);
+        let startOfShift = new Date();
+        startOfShift.setHours(closeHour, closeMinute, 0, 0);
+        if (today < startOfShift) startOfShift.setDate(startOfShift.getDate() - 1);
+        const todayISO = startOfShift.toISOString();
+
         const { data: existing } = await supabase
           .from('customers')
-          .select('id, status')
+          .select('id, status, created_at')
           .eq('company_id', companyId)
           .eq('phone_number', formData.phone)
           .in('status', ['waiting', 'notified'])
-          .gte('created_at', today.toISOString())
           .limit(1);
 
         if (existing && existing.length > 0) {
-          alert('Este cliente já se encontra na fila de espera ou foi notificado. Não é possível registá-lo novamente.');
-          isSubmittingRef.current = false;
-          setSubmitting(false);
-          return;
+          const oldRecord = existing[0];
+          // Se o registo for do turno atual, bloqueia
+          if (new Date(oldRecord.created_at) >= new Date(todayISO)) {
+            alert('Este cliente já se encontra na fila de espera ou foi notificado hoje. Não é possível registá-lo novamente.');
+            isSubmittingRef.current = false;
+            setSubmitting(false);
+            return;
+          } else {
+            // Se for de um dia anterior, "limpa" (cancela) o registo antigo para dar lugar ao novo
+            await supabase
+              .from('customers')
+              .update({ status: 'cancelled' })
+              .eq('id', oldRecord.id);
+            console.log(`Limpando registo obsoleto do cliente ${formData.phone} de ${oldRecord.created_at}`);
+          }
         }
       }
 
@@ -425,35 +553,118 @@ function App() {
     if (!bulkMessage.trim()) return alert('Escreva a mensagem que deseja enviar.');
     
     const count = selectedClients.length;
-    if (!window.confirm(`Deseja enviar esta SMS para ${count} clientes agora?`)) return;
+    
+    // Alerta de volume para WhatsApp (Abre muitas abas)
+    if (messageChannel === 'whatsapp' && count > 10) {
+      if (!window.confirm(`Atenção: Vai abrir ${count} janelas do WhatsApp. Isto pode tornar o seu computador lento. Recomenda-se enviar em lotes pequenos. Deseja continuar?`)) return;
+    } else {
+      if (!window.confirm(`Deseja enviar esta campanha para ${count} clientes via ${messageChannel.toUpperCase()} agora?`)) return;
+    }
 
     setLoading(true);
     let successCount = 0;
     let failCount = 0;
 
+    // Conteúdo final com link de imagem se existir
+    const finalMsg = marketingImageUrl 
+      ? `${bulkMessage}\n\n📷 Ver imagem: ${marketingImageUrl}\n\n${companyName}`
+      : `${bulkMessage}\n\n${companyName}`;
+
     for (const phone of selectedClients) {
       const customer = getUniqueCustomers().find(c => c.phone_number === phone);
       if (!customer) continue;
-
-      const finalMsg = `${bulkMessage}\n\n${companyName}`;
       
       try {
-        if (smsMethod === 'twilio') {
-          const baseUrl = (supabaseUrl || '').replace(/\/$/, '');
-          const targetUrl = `${baseUrl}/functions/v1/send-sms`;
-          const resp = await fetch(targetUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'apikey': supabaseAnonKey },
-            body: JSON.stringify({ to: phone, name: customer.first_name, content: finalMsg })
-          });
-          if (resp.ok) successCount++; else failCount++;
-        } else if (smsMethod === 'native' && Capacitor.isNativePlatform() && NativeSms) {
-          await NativeSms.send({ phoneNumber: phone, message: finalMsg });
+        if (messageChannel === 'whatsapp') {
+          const caption = `${bulkMessage}\n\n${companyName}`;
+
+          // CASE 1: Android Nativo (APK) - Partilha Real com Ficheiro
+          if (Capacitor.isNativePlatform() && marketingImageUrl) {
+            try {
+              const response = await fetch(marketingImageUrl);
+              const blob = await response.blob();
+              
+              // Converter Blob para Base64 para o Filesystem do Android
+              const reader = new FileReader();
+              const base64Data = await new Promise((resolve) => {
+                reader.onloadend = () => resolve(reader.result);
+                reader.readAsDataURL(blob);
+              });
+              const base64Content = (base64Data).split(',')[1];
+
+              // Guardar temp e partilhar
+              await Filesystem.writeFile({
+                path: 'mkt_temp.jpg',
+                data: base64Content,
+                directory: Directory.Cache
+              });
+              
+              const { uri } = await Filesystem.getUri({
+                path: 'mkt_temp.jpg',
+                directory: Directory.Cache
+              });
+
+              await Share.share({
+                files: [uri],
+                text: caption
+              });
+              
+              successCount++;
+              continue;
+            } catch (nativeErr) {
+              console.warn('Erro na partilha nativa APK:', nativeErr);
+              // Fallback para wa.me
+            }
+          }
+
+          // CASE 2: PWA / Web Share (Mobile Browser) - Partilha Real com Ficheiro
+          if (marketingImageUrl && navigator.share) {
+            try {
+              const response = await fetch(marketingImageUrl);
+              const blob = await response.blob();
+              const file = new File([blob], 'promocao.jpg', { type: blob.type });
+              
+              if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                await navigator.share({
+                  files: [file],
+                  title: 'Campanha de Marketing',
+                  text: caption
+                });
+                successCount++;
+                continue;
+              }
+            } catch (pwaErr) {
+              console.warn('Erro na partilha PWA:', pwaErr);
+              // Fallback para wa.me
+            }
+          }
+
+          // CASE 3: Desktop ou Fallback (wa.me) - Link apenas
+          let cleanPhone = phone.replace(/\s+/g, '').replace('+', '');
+          if (cleanPhone.length === 9) cleanPhone = `351${cleanPhone}`;
+          
+          const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(finalMsg)}`;
+          window.open(waUrl, '_blank');
           successCount++;
         } else {
-          const smsUrl = `sms:${phone}?body=${encodeURIComponent(finalMsg)}`;
-          window.open(smsUrl, '_blank');
-          successCount++;
+          // Canal SMS
+          if (smsMethod === 'twilio') {
+            const baseUrl = (supabaseUrl || '').replace(/\/$/, '');
+            const targetUrl = `${baseUrl}/functions/v1/send-sms`;
+            const resp = await fetch(targetUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'apikey': supabaseAnonKey },
+              body: JSON.stringify({ to: phone, name: customer.first_name, content: finalMsg })
+            });
+            if (resp.ok) successCount++; else failCount++;
+          } else if (smsMethod === 'native' && Capacitor.isNativePlatform() && NativeSms) {
+            await NativeSms.send({ phoneNumber: phone, message: finalMsg });
+            successCount++;
+          } else {
+            const smsUrl = `sms:${phone}?body=${encodeURIComponent(finalMsg)}`;
+            window.open(smsUrl, '_blank');
+            successCount++;
+          }
         }
       } catch (err) {
         console.error(`Erro ao enviar para ${phone}:`, err);
@@ -464,7 +675,9 @@ function App() {
     setLoading(false);
     setSelectedClients([]);
     setBulkMessage('');
-    alert(`Processo concluído: ${successCount} envios com sucesso e ${failCount} falhas.`);
+    setMarketingImage(null);
+    setMarketingImageUrl(null);
+    alert(`Processo concluído: ${successCount} envios processados.`);
   };
 
   const toggleClientSelection = (phone) => {
@@ -549,7 +762,9 @@ function App() {
   };
 
   const getUniqueCustomers = () => {
-    const sorted = [...customers].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+    // Agora utilizamos o estado global 'allClients' para o CRM
+    const dataSource = viewMode === 'clients' ? allClients : customers;
+    const sorted = [...dataSource].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
     const uniqueMap = new Map();
     sorted.forEach(c => {
       uniqueMap.set(c.phone_number, c);
@@ -588,45 +803,104 @@ function App() {
 
   return (
     <div className="container">
-      {/* Header */}
-      <header className="header" style={{ marginBottom: '2rem' }}>
-        <div className="logo-section">
-          <div className="logo-icon" style={{ padding: logoUrl ? '0' : '0.5rem', overflow: 'hidden' }}>
-            {logoUrl ? (
-                <img src={logoUrl} alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-            ) : (
-                <Users size={24} />
-            )}
+      <div className="sticky-header-wrapper">
+        {/* Header */}
+        <header className="header">
+          <div className="logo-section">
+            <div className="logo-icon" style={{ padding: logoUrl ? '0' : '0.5rem', overflow: 'hidden' }}>
+              {logoUrl ? (
+                  <img src={logoUrl} alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              ) : (
+                  <Users size={24} />
+              )}
+            </div>
+            <div>
+              <h1 style={{ fontSize: '1.4rem', margin: 0 }}>{companyName} <span style={{ fontSize: '0.6rem', verticalAlign: 'middle', opacity: 0.5 }}>v2</span></h1>
+              <p style={{ color: 'var(--text-dim)', fontSize: '0.8rem' }}>Gestão de Fila Inteligente</p>
+            </div>
           </div>
-          <div>
-            <h1>{companyName} <span style={{ fontSize: '0.6rem', verticalAlign: 'middle', opacity: 0.5 }}>v2</span></h1>
-            <p style={{ color: 'var(--text-dim)', fontSize: '0.875rem' }}>Gestão de Fila Inteligente</p>
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+            <button className="btn" onClick={() => setShowModal(true)} style={{ background: 'rgba(255,255,255,0.2)', color: 'white', border: '1px solid rgba(255,255,255,0.1)' }}>
+              <Plus size={20} /> <span className="hide-mobile">Nova Reserva</span>
+            </button>
+            
+            <button className={`btn ${viewMode === 'queue' ? 'btn-primary' : ''}`} onClick={() => setViewMode('queue')} style={{ background: viewMode === 'queue' ? '' : 'rgba(255,255,255,0.2)', color: 'white', border: viewMode === 'queue' ? 'none' : '1px solid rgba(255,255,255,0.1)' }}>
+              Fila Atual
+            </button>
+            
+            <button className={`btn ${viewMode === 'clients' ? 'btn-primary' : ''}`} onClick={() => setViewMode('clients')} style={{ background: viewMode === 'clients' ? '' : 'rgba(255,255,255,0.2)', color: 'white', border: viewMode === 'clients' ? 'none' : '1px solid rgba(255,255,255,0.1)' }}>
+              Clientes
+            </button>
+            
+            <button className={`btn ${viewMode === 'history' ? 'btn-primary' : ''}`} onClick={() => setViewMode('history')} style={{ background: viewMode === 'history' ? '' : 'rgba(255,255,255,0.2)', color: 'white', border: viewMode === 'history' ? 'none' : '1px solid rgba(255,255,255,0.1)' }}>
+              Histórico
+            </button>
+
+            <button className="btn" onClick={() => handleSetKioskMode(true)} style={{ background: 'rgba(255,255,255,0.2)', color: 'white', border: '1px solid rgba(255,255,255,0.1)' }} title="Modo Tablet">
+              <Tablet size={18} /> Quiosque
+            </button>
+            
+            <button className={`btn ${viewMode === 'settings' ? 'btn-primary' : ''}`} onClick={() => setViewMode('settings')} style={{ background: viewMode === 'settings' ? '' : 'rgba(255,255,255,0.2)', color: 'white', border: viewMode === 'settings' ? 'none' : '1px solid rgba(255,255,255,0.1)' }}>
+              <Settings size={20} />
+            </button>
+            
+            <button className="btn-icon" onClick={handleLogout} title="Terminar Sessão" style={{ background: 'rgba(239, 68, 68, 0.2)', color: 'var(--danger)', borderColor: 'var(--danger)' }}>
+              <LogOut size={20} />
+            </button>
           </div>
-        </div>
-        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-          <button className={`btn ${viewMode === 'queue' ? 'btn-primary' : ''}`} onClick={() => setViewMode('queue')} style={{ background: viewMode === 'queue' ? '' : 'rgba(255,255,255,0.1)' }}>
-            Fila Atual
-          </button>
-          <button className={`btn ${viewMode === 'history' ? 'btn-primary' : ''}`} onClick={() => setViewMode('history')} style={{ background: viewMode === 'history' ? '' : 'rgba(255,255,255,0.1)' }}>
-            Histórico
-          </button>
-          <button className={`btn ${viewMode === 'clients' ? 'btn-primary' : ''}`} onClick={() => setViewMode('clients')} style={{ background: viewMode === 'clients' ? '' : 'rgba(255,255,255,0.1)' }}>
-            Clientes
-          </button>
-          <button className={`btn ${viewMode === 'settings' ? 'btn-primary' : ''}`} onClick={() => setViewMode('settings')} style={{ background: viewMode === 'settings' ? '' : 'rgba(255,255,255,0.1)' }}>
-            <Settings size={20} />
-          </button>
-          <button className="btn btn-primary" onClick={() => handleSetKioskMode(true)} style={{ background: 'var(--primary)', boxShadow: '0 4px 12px rgba(99, 102, 241, 0.3)' }} title="Modo Tablet">
-            <Tablet size={18} /> Quiosque
-          </button>
-          <button className="btn btn-primary" onClick={() => setShowModal(true)}>
-            <Plus size={20} /> <span className="hide-mobile">Novo Cliente</span>
-          </button>
-          <button className="btn-icon" onClick={handleLogout} title="Terminar Sessão" style={{ background: 'rgba(239, 68, 68, 0.1)', color: 'var(--danger)', borderColor: 'var(--danger)' }}>
-            <LogOut size={20} />
-          </button>
-        </div>
-      </header>
+        </header>
+
+        {/* Stats Overview - Agora visível e sticky apenas na Fila Atual no Desktop, oculto se o modal estiver aberto */}
+        {viewMode === 'queue' && !showModal && (
+          <div className="stats-grid" style={{ marginTop: '1.5rem', marginBottom: '0' }}>
+            <div 
+              className="glass" 
+              style={{ 
+                padding: '1.25rem', 
+                cursor: 'pointer',
+                border: statusFilter === 'waiting' ? '1px solid var(--primary)' : '1px solid var(--border-color)',
+                boxShadow: statusFilter === 'waiting' ? '0 0 15px rgba(99, 102, 241, 0.2)' : 'none',
+                transform: statusFilter === 'waiting' ? 'translateY(-2px)' : 'none',
+                transition: 'all 0.2s ease'
+              }}
+              onClick={() => setStatusFilter(prev => prev === 'waiting' ? null : 'waiting')}
+            >
+              <p style={{ color: 'var(--text-dim)', fontSize: '0.8rem', fontWeight: 600, textTransform: 'uppercase' }}>Em Espera</p>
+              <p style={{ fontSize: '1.75rem', fontWeight: '700' }}>{customers.filter(c => c.status === 'waiting').length}</p>
+            </div>
+            <div 
+              className="glass" 
+              style={{ 
+                padding: '1.25rem', 
+                cursor: 'pointer',
+                border: statusFilter === 'notified' ? '1px solid var(--primary)' : '1px solid var(--border-color)',
+                boxShadow: statusFilter === 'notified' ? '0 0 15px rgba(99, 102, 241, 0.2)' : 'none',
+                transform: statusFilter === 'notified' ? 'translateY(-2px)' : 'none',
+                transition: 'all 0.2s ease'
+              }}
+              onClick={() => setStatusFilter(prev => prev === 'notified' ? null : 'notified')}
+            >
+              <p style={{ color: 'var(--text-dim)', fontSize: '0.8rem', fontWeight: 600, textTransform: 'uppercase' }}>Notificados</p>
+              <p style={{ fontSize: '1.75rem', fontWeight: '700', color: 'var(--primary)' }}>{customers.filter(c => c.status === 'notified').length}</p>
+            </div>
+            <div 
+              className="glass" 
+              style={{ 
+                padding: '1.25rem', 
+                cursor: 'pointer',
+                border: statusFilter === 'seated' ? '1px solid var(--success)' : '1px solid var(--border-color)',
+                boxShadow: statusFilter === 'seated' ? '0 0 15px rgba(16, 185, 129, 0.2)' : 'none',
+                transform: statusFilter === 'seated' ? 'translateY(-2px)' : 'none',
+                transition: 'all 0.2s ease'
+              }}
+              onClick={() => setStatusFilter(prev => prev === 'seated' ? null : 'seated')}
+            >
+              <p style={{ color: 'var(--text-dim)', fontSize: '0.8rem', fontWeight: 600, textTransform: 'uppercase' }}>Sentados Hoje</p>
+              <p style={{ fontSize: '1.75rem', fontWeight: '700', color: 'var(--success)' }}>{customers.filter(c => c.status === 'seated').length}</p>
+            </div>
+          </div>
+        )}
+      </div>
 
       {viewMode === 'settings' && (
         <SettingsPanel
@@ -657,154 +931,280 @@ function App() {
             </div>
           </div>
 
-          {/* Bulk SMS Panel */}
-          <div style={{ background: 'rgba(99, 102, 241, 0.05)', border: '1px solid rgba(99, 102, 241, 0.2)', borderRadius: '1rem', padding: '1.5rem', marginBottom: '2rem' }}>
-            <h4 style={{ margin: '0 0 1rem 0', display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--primary)' }}>
-              <Send size={18} /> Enviar Mensagem em Lote
-            </h4>
+          {/* Bulk Messaging Panel */}
+          <div style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '1.5rem', padding: '1.5rem', marginBottom: '2.5rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
+              <h4 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.6rem', color: 'var(--primary)', fontSize: '1.1rem' }}>
+                <Send size={18} /> Campanhas de Marketing
+              </h4>
+              
+              <div style={{ display: 'flex', background: 'rgba(0,0,0,0.2)', padding: '0.25rem', borderRadius: '0.75rem' }}>
+                <button 
+                  onClick={() => setMessageChannel('sms')}
+                  style={{ 
+                    padding: '0.5rem 1rem', 
+                    borderRadius: '0.6rem', 
+                    border: 'none', 
+                    cursor: 'pointer',
+                    fontSize: '0.85rem',
+                    fontWeight: 600,
+                    background: messageChannel === 'sms' ? 'var(--primary)' : 'transparent',
+                    color: 'white',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  SMS
+                </button>
+                <button 
+                  onClick={() => setMessageChannel('whatsapp')}
+                  style={{ 
+                    padding: '0.5rem 1rem', 
+                    borderRadius: '0.6rem', 
+                    border: 'none', 
+                    cursor: 'pointer',
+                    fontSize: '0.85rem',
+                    fontWeight: 600,
+                    background: messageChannel === 'whatsapp' ? 'var(--success)' : 'transparent',
+                    color: 'white',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  WhatsApp
+                </button>
+              </div>
+            </div>
+
             <textarea
               className="form-input"
-              placeholder="Escreva a mensagem personalizada aqui... (O nome do restaurante será adicionado no final)"
-              style={{ minHeight: '100px', marginBottom: '1rem', background: 'rgba(0,0,0,0.2)' }}
+              placeholder={messageChannel === 'sms' 
+                ? "Escreva a SMS de marketing... (Texto apenas)" 
+                : "Escreva a mensagem de WhatsApp... (Pode incluir link de imagem)"}
+              style={{ minHeight: '120px', marginBottom: '1rem', background: 'rgba(0,0,0,0.2)', fontSize: '1rem' }}
               value={bulkMessage}
               onChange={(e) => setBulkMessage(e.target.value)}
             />
+
+            {messageChannel === 'whatsapp' && (
+              <div style={{ marginBottom: '1.5rem', padding: '1rem', background: 'rgba(16, 185, 129, 0.05)', borderRadius: '1rem', border: '1px dashed rgba(16, 185, 129, 0.2)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                  <button 
+                    className="btn" 
+                    onClick={() => document.getElementById('mkt-image-input').click()}
+                    style={{ background: 'rgba(255,255,255,0.1)', fontSize: '0.85rem' }}
+                    disabled={isUploadingImage}
+                  >
+                    <Image size={18} /> {isUploadingImage ? 'A carregar...' : marketingImage ? 'Trocar Imagem' : 'Anexar Imagem'}
+                  </button>
+                  <input 
+                    id="mkt-image-input"
+                    type="file" 
+                    accept="image/*" 
+                    hidden 
+                    onChange={handleMarketingImageUpload} 
+                  />
+                  {marketingImage && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <span style={{ fontSize: '0.85rem', color: 'var(--success)' }}>✓ {marketingImage.name}</span>
+                      <button 
+                        onClick={() => { setMarketingImage(null); setMarketingImageUrl(null); }}
+                        style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer' }}
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  )}
+                </div>
+                <p style={{ margin: '0.5rem 0 0', fontSize: '0.75rem', color: 'var(--text-dim)' }}>
+                  A imagem será enviada como um link no WhatsApp para poupar custos de gateway.
+                </p>
+              </div>
+            )}
+
+            {messageChannel === 'sms' && marketingImage && (
+              <p style={{ color: 'var(--warning)', fontSize: '0.8rem', marginBottom: '1rem' }}>
+                ⚠️ A imagem anexada será ignorada no canal SMS.
+              </p>
+            )}
+
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-dim)' }}>
+              <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-dim)', fontWeight: 500 }}>
                 {selectedClients.length} cliente(s) selecionado(s)
               </p>
               <button 
-                className="btn btn-primary" 
+                className="btn" 
                 onClick={handleSendBulkSMS}
-                disabled={selectedClients.length === 0 || !bulkMessage.trim()}
-                style={{ filter: (selectedClients.length === 0 || !bulkMessage.trim()) ? 'grayscale(1)' : 'none' }}
+                disabled={selectedClients.length === 0 || !bulkMessage.trim() || isUploadingImage}
+                style={{ 
+                  background: (selectedClients.length === 0 || !bulkMessage.trim()) ? 'rgba(255,255,255,0.1)' : (messageChannel === 'whatsapp' ? 'var(--success)' : 'var(--primary)'),
+                  color: 'white',
+                  padding: '0.8rem 1.5rem'
+                }}
               >
-                Enviar para Selecionados
+                {messageChannel === 'whatsapp' ? <><MessageSquare size={18} /> Enviar WhatsApp</> : <><Send size={18} /> Enviar SMS</>}
               </button>
             </div>
           </div>
 
           <div style={{ display: 'grid', gap: '0.75rem' }}>
-            {getUniqueCustomers().map((c) => (
-              <div key={c.phone_number} style={{ display: 'flex', alignItems: 'center', padding: '1rem', background: 'rgba(255,255,255,0.05)', borderRadius: '0.75rem', gap: '1rem' }}>
-                <input 
-                  type="checkbox" 
-                  checked={selectedClients.includes(c.phone_number)}
-                  onChange={() => toggleClientSelection(c.phone_number)}
-                  style={{ width: '20px', height: '20px', cursor: 'pointer' }}
-                />
-                
-                <div style={{ flex: 1 }}>
-                  {editingClient?.phone_number === c.phone_number ? (
-                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                      <input 
-                        className="form-input" 
-                        style={{ flex: 1, padding: '0.4rem' }} 
-                        value={editFormData.firstName} 
-                        onChange={(e) => setEditFormData({...editFormData, firstName: e.target.value})}
-                      />
-                      <input 
-                        className="form-input" 
-                        style={{ flex: 1, padding: '0.4rem' }} 
-                        value={editFormData.lastName} 
-                        onChange={(e) => setEditFormData({...editFormData, lastName: e.target.value})}
-                      />
-                      <input 
-                        className="form-input" 
-                        style={{ flex: 1, padding: '0.4rem' }} 
-                        value={editFormData.phone} 
-                        onChange={(e) => setEditFormData({...editFormData, phone: e.target.value})}
-                      />
-                    </div>
-                  ) : (
-                    <>
-                      <h3 style={{ fontSize: '1.1rem', margin: 0 }}>{c.first_name} {c.last_name}</h3>
-                      <p style={{ color: 'var(--text-dim)', margin: 0, marginTop: '0.25rem', fontWeight: 600 }}>{c.phone_number}</p>
-                    </>
-                  )}
-                </div>
+            {clientsLoading ? (
+              <p style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-dim)' }}>A carregar carteira de clientes global...</p>
+            ) : getUniqueCustomers().length === 0 ? (
+              <p style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-dim)' }}>Sem clientes registados na base de dados.</p>
+            ) : (
+              getUniqueCustomers().map((c) => (
+                <div key={c.phone_number} style={{ display: 'flex', alignItems: 'center', padding: '1rem', background: 'rgba(255,255,255,0.05)', borderRadius: '0.75rem', gap: '1rem' }}>
+                  <input 
+                    type="checkbox" 
+                    checked={selectedClients.includes(c.phone_number)}
+                    onChange={() => toggleClientSelection(c.phone_number)}
+                    style={{ width: '20px', height: '20px', cursor: 'pointer' }}
+                  />
+                  
+                  <div style={{ flex: 1 }}>
+                    {editingClient?.phone_number === c.phone_number ? (
+                      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                        <input 
+                          className="form-input" 
+                          style={{ flex: 1, padding: '0.4rem' }} 
+                          value={editFormData.firstName} 
+                          onChange={(e) => setEditFormData({...editFormData, firstName: e.target.value})}
+                        />
+                        <input 
+                          className="form-input" 
+                          style={{ flex: 1, padding: '0.4rem' }} 
+                          value={editFormData.lastName} 
+                          onChange={(e) => setEditFormData({...editFormData, lastName: e.target.value})}
+                        />
+                        <input 
+                          className="form-input" 
+                          style={{ flex: 1, padding: '0.4rem' }} 
+                          value={editFormData.phone} 
+                          onChange={(e) => setEditFormData({...editFormData, phone: e.target.value})}
+                        />
+                      </div>
+                    ) : (
+                      <>
+                        <h3 style={{ fontSize: '1.1rem', margin: 0 }}>{c.first_name} {c.last_name}</h3>
+                        <p style={{ color: 'var(--text-dim)', margin: 0, marginTop: '0.25rem', fontWeight: 600 }}>{c.phone_number}</p>
+                      </>
+                    )}
+                  </div>
 
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                  {editingClient?.phone_number === c.phone_number ? (
-                    <>
-                      <button className="btn-icon success" onClick={handleUpdateClient} title="Guardar">
-                        <Check size={18} />
-                      </button>
-                      <button className="btn-icon danger" onClick={() => setEditingClient(null)} title="Cancelar">
-                        <X size={18} />
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <button className="btn-icon primary" onClick={() => startEditing(c)} title="Editar">
-                        <Edit3 size={18} />
-                      </button>
-                      <button className="btn-icon danger" onClick={() => handleDeleteClient(c.phone_number)} title="Eliminar Histórico">
-                        <Trash2 size={18} />
-                      </button>
-                    </>
-                  )}
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    {editingClient?.phone_number === c.phone_number ? (
+                      <>
+                        <button className="btn-icon success" onClick={handleUpdateClient} title="Guardar">
+                          <Check size={18} />
+                        </button>
+                        <button className="btn-icon danger" onClick={() => setEditingClient(null)} title="Cancelar">
+                          <X size={18} />
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button className="btn-icon primary" onClick={() => startEditing(c)} title="Editar">
+                          <Edit3 size={18} />
+                        </button>
+                        <button className="btn-icon danger" onClick={() => handleDeleteClient(c.phone_number)} title="Eliminar Histórico">
+                          <Trash2 size={18} />
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
-            {getUniqueCustomers().length === 0 && (
-              <p style={{ textAlign: 'center', color: 'var(--text-dim)' }}>Sem clientes registados.</p>
+              ))
             )}
           </div>
         </div>
       )}
 
-      {viewMode !== 'clients' && (
-      <>
-      {/* Stats Overview */}
-      <div className="stats-grid">
-        <div 
-          className="glass" 
-          style={{ 
-            padding: '1.5rem', 
-            cursor: 'pointer',
-            border: statusFilter === 'waiting' ? '1px solid var(--primary)' : '1px solid var(--border-color)',
-            boxShadow: statusFilter === 'waiting' ? '0 0 15px rgba(99, 102, 241, 0.2)' : 'none',
-            transform: statusFilter === 'waiting' ? 'translateY(-2px)' : 'none',
-            transition: 'all 0.2s ease'
-          }}
-          onClick={() => setStatusFilter(prev => prev === 'waiting' ? null : 'waiting')}
-        >
-          <p style={{ color: 'var(--text-dim)', fontSize: '0.875rem' }}>Em Espera</p>
-          <p style={{ fontSize: '2rem', fontWeight: '700' }}>{customers.filter(c => c.status === 'waiting').length}</p>
-        </div>
-        <div 
-          className="glass" 
-          style={{ 
-            padding: '1.5rem', 
-            cursor: 'pointer',
-            border: statusFilter === 'notified' ? '1px solid var(--primary)' : '1px solid var(--border-color)',
-            boxShadow: statusFilter === 'notified' ? '0 0 15px rgba(99, 102, 241, 0.2)' : 'none',
-            transform: statusFilter === 'notified' ? 'translateY(-2px)' : 'none',
-            transition: 'all 0.2s ease'
-          }}
-          onClick={() => setStatusFilter(prev => prev === 'notified' ? null : 'notified')}
-        >
-          <p style={{ color: 'var(--text-dim)', fontSize: '0.875rem' }}>Notificados</p>
-          <p style={{ fontSize: '2rem', fontWeight: '700', color: 'var(--primary)' }}>{customers.filter(c => c.status === 'notified').length}</p>
-        </div>
-        <div 
-          className="glass" 
-          style={{ 
-            padding: '1.5rem', 
-            cursor: 'pointer',
-            border: statusFilter === 'seated' ? '1px solid var(--success)' : '1px solid var(--border-color)',
-            boxShadow: statusFilter === 'seated' ? '0 0 15px rgba(16, 185, 129, 0.2)' : 'none',
-            transform: statusFilter === 'seated' ? 'translateY(-2px)' : 'none',
-            transition: 'all 0.2s ease'
-          }}
-          onClick={() => setStatusFilter(prev => prev === 'seated' ? null : 'seated')}
-        >
-          <p style={{ color: 'var(--text-dim)', fontSize: '0.875rem' }}>Sentados Hoje</p>
-          <p style={{ fontSize: '2rem', fontWeight: '700', color: 'var(--success)' }}>{customers.filter(c => c.status === 'seated').length}</p>
-        </div>
-      </div>
+      {viewMode === 'history' && (
+        <div className="glass" style={{ padding: '2rem', marginBottom: '2rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' }}>
+            <h2 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <Clock className="text-primary" /> Histórico Global
+            </h2>
+            <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+              <div style={{ position: 'relative' }}>
+                <Search size={18} style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-dim)' }} />
+                <input 
+                  type="text" 
+                  className="form-input" 
+                  placeholder="Pesquisar por nome..." 
+                  style={{ paddingLeft: '2.5rem', width: '250px' }}
+                  value={historySearch}
+                  onChange={(e) => setHistorySearch(e.target.value)}
+                />
+              </div>
+              <input 
+                type="date" 
+                className="form-input" 
+                value={historyDateFilter}
+                onChange={(e) => setHistoryDateFilter(e.target.value)}
+                style={{ width: '180px' }}
+              />
+              <button 
+                className="btn" 
+                onClick={() => { setHistorySearch(''); setHistoryDateFilter(''); }}
+                style={{ background: 'rgba(255,255,255,0.1)' }}
+              >
+                Limpar
+              </button>
+            </div>
+          </div>
 
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: '0 0.5rem' }}>
+              <thead>
+                <tr style={{ color: 'var(--text-dim)', textAlign: 'left', fontSize: '0.9rem' }}>
+                  <th style={{ padding: '1rem' }}>Cliente</th>
+                  <th style={{ padding: '1rem' }}>Telemóvel</th>
+                  <th style={{ padding: '1rem', textAlign: 'center' }}>PAX</th>
+                  <th style={{ padding: '1rem' }}>Data/Hora Chegada</th>
+                  <th style={{ padding: '1rem' }}>Estado</th>
+                </tr>
+              </thead>
+              <tbody>
+                {historyLoading ? (
+                  <tr>
+                    <td colSpan="5" style={{ textAlign: 'center', padding: '3rem' }}>A carregar histórico...</td>
+                  </tr>
+                ) : historyData.length === 0 ? (
+                  <tr>
+                    <td colSpan="5" style={{ textAlign: 'center', padding: '3rem' }}>Nenhum registo encontrado.</td>
+                  </tr>
+                ) : (
+                  historyData.map((c) => (
+                    <tr key={c.id} style={{ background: 'rgba(255,255,255,0.03)', borderRadius: '0.75rem' }}>
+                      <td style={{ padding: '1rem', fontWeight: 600, borderTopLeftRadius: '0.75rem', borderBottomLeftRadius: '0.75rem' }}>
+                        {c.first_name} {c.last_name}
+                      </td>
+                      <td style={{ padding: '1rem' }}>{c.phone_number}</td>
+                      <td style={{ padding: '1rem', textAlign: 'center' }}>
+                        <div style={{ display: 'flex', justifyContent: 'center', gap: '0.5rem' }}>
+                          <span title="Adultos"><Users size={14} style={{ verticalAlign: 'middle', marginRight: '2px' }} /> {c.adults}</span>
+                          {c.children > 0 && <span title="Crianças"><Baby size={14} style={{ verticalAlign: 'middle', marginRight: '2px' }} /> {c.children}</span>}
+                        </div>
+                      </td>
+                      <td style={{ padding: '1rem' }}>
+                        {new Date(c.created_at).toLocaleDateString()} {new Date(c.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </td>
+                      <td style={{ padding: '1rem', borderTopRightRadius: '0.75rem', borderBottomRightRadius: '0.75rem' }}>
+                        <span className={`status-badge status-${c.status}`} style={{ fontSize: '0.65rem' }}>
+                          {c.status === 'waiting' ? 'Em Espera' : c.status === 'notified' ? 'Notificado' : c.status === 'seated' ? 'Sentado' : 'Cancelado'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {viewMode === 'queue' && (
+      <>
       {/* Queue Grid */}
       {loading ? (
         <p style={{ textAlign: 'center', color: "var(--text-dim)" }}>A carregar fila...</p>
@@ -813,9 +1213,8 @@ function App() {
           {(() => {
             const items = customers.filter(c => {
               if (statusFilter) return c.status === statusFilter;
-              return viewMode === 'history' ? true : (c.status !== 'seated' && c.status !== 'cancelled');
+              return c.status !== 'seated' && c.status !== 'cancelled';
             });
-            // Deduplicação absoluta no render para evitar quebra do DOM se as keys forem repetidas
             const uniqueItems = Array.from(new Map(items.map(item => [item.id, item])).values());
             
             return uniqueItems
@@ -827,7 +1226,7 @@ function App() {
                 return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
               })
               .map((customer) => (
-                <div key={customer.id} className="glass customer-card" style={{ opacity: (customer.status === 'seated' || customer.status === 'cancelled') ? 0.6 : 1 }}>
+                <div key={customer.id} className="glass customer-card">
               <div className="card-header">
                 <div>
                   <h3 className="customer-name">{customer.first_name} {customer.last_name}</h3>
@@ -842,56 +1241,41 @@ function App() {
                     </span>
                   </div>
                 </div>
-                <div className="meta-item" style={{ color: 'var(--text-dim)' }}>
-                  <Clock size={16} /> {formatArrival(customer.created_at || customer.arrival_time)}
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <button className="btn-icon primary" onClick={() => sendSMS(customer)} title="Enviar Notificação">
+                    <Send size={18} />
+                  </button>
+                  <button className="btn-icon success" onClick={() => updateStatus(customer.id, 'seated')} title="Marcar como Sentado">
+                    <CheckCircle2 size={18} />
+                  </button>
+                  <button className="btn-icon danger" onClick={() => updateStatus(customer.id, 'cancelled')} title="Cancelar">
+                    <XCircle size={18} />
+                  </button>
                 </div>
               </div>
-
+              
               <div className="customer-meta">
                 <div className="meta-item">
-                  <Users size={16} /> {customer.adults} Adultos
+                  <Baby size={16} />
+                  <span>{customer.adults} adultos, {customer.children} crianças</span>
                 </div>
-                {customer.children > 0 && (
-                  <div className="meta-item">
-                    <Baby size={16} /> {customer.children} Crianças
-                  </div>
-                )}
+                <div className="meta-item">
+                  <Clock size={16} />
+                  <span>Chegada: {formatArrival(customer.created_at || customer.arrival_time)}</span>
+                </div>
               </div>
 
               <div className="card-actions">
-                {customer.status !== 'seated' && customer.status !== 'cancelled' && (
-                  <>
-                    <button className="btn-icon primary" title="Enviar SMS" onClick={() => sendSMS(customer)}>
-                      <Send size={18} />
-                    </button>
-
-                    <button className="btn-icon success" title="Sentar Cliente" onClick={() => updateStatus(customer.id, 'seated')}>
-                      <CheckCircle2 size={18} />
-                    </button>
-                    <button className="btn-icon danger" title="Cancelar" onClick={() => updateStatus(customer.id, 'cancelled')}>
-                      <XCircle size={18} />
-                    </button>
-                  </>
-                )}
-                {(customer.status === 'seated' || customer.status === 'cancelled') && (
-                  <span style={{ color: 'var(--text-dim)', fontSize: '0.8rem', fontStyle: 'italic' }}>
-                    Cliente {customer.status === 'seated' ? 'sentado e finalizado' : 'cancelado da fila'}.
-                  </span>
-                )}
+                <button className="btn-icon" onClick={() => {
+                  const msg = `sms:${customer.phone_number}?body=${encodeURIComponent(`Olá ${customer.first_name}, a sua mesa está pronta!`)}`;
+                  window.location.href = msg;
+                }} title="Mensagem Direta">
+                  <Link size={18} />
+                </button>
               </div>
-                </div>
-              ));
-          })()}
-          {customers.filter(c => {
-            if (statusFilter) return c.status === statusFilter;
-            return viewMode === 'history' ? true : (c.status !== 'seated' && c.status !== 'cancelled');
-          }).length === 0 && (
-            <div className="glass" style={{ gridColumn: '1 / -1', padding: '4rem', textAlign: 'center', borderStyle: 'dashed' }}>
-              <p style={{ color: 'var(--text-dim)' }}>
-                {viewMode === 'history' ? 'Ainda não existem clientes no histórico.' : 'A fila está vazia. Comece por registar um novo cliente.'}
-              </p>
             </div>
-          )}
+          ));
+          })()}
         </div>
       )}
       </>
@@ -902,87 +1286,75 @@ function App() {
         <div className="modal-overlay">
           <div className="glass modal-content">
             <h2 style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-              <UserPlus className="text-primary" /> Novo Cliente
+              <UserPlus className="text-primary" /> Nova Reserva
             </h2>
             <form onSubmit={handleSubmit}>
-              
               <div className="form-group">
-                <label className="form-label">Telemóvel (escreva o número e pressione fora)</label>
+                <label className="form-label">Telemóvel</label>
                 <div style={{ position: 'relative' }}>
-                  <input 
-                    type="tel" 
-                    className="form-input" 
-                    placeholder="Ex: 91xxxxxxx"
-                    required 
+                  <input
+                    type="tel"
+                    className="form-input"
+                    placeholder="912 345 678"
+                    required
                     value={formData.phone}
-                    onChange={(e) => setFormData({...formData, phone: e.target.value})}
+                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                     onBlur={handlePhoneBlur}
                   />
-                  <Search size={16} style={{ position: 'absolute', right: '1rem', top: '1.1rem', color: 'var(--text-dim)' }} />
+                  <Search size={18} style={{ position: 'absolute', right: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-dim)' }} />
                 </div>
-                <p style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginTop: '0.4rem' }}>
-                  A plataforma preenche automaticamente caso este cliente já vos tenha visitado.
-                </p>
               </div>
-
               <div className="form-row">
                 <div className="form-group">
                   <label className="form-label">Primeiro Nome</label>
-                  <input 
-                    type="text" 
-                    className="form-input" 
-                    required 
+                  <input
+                    type="text"
+                    className="form-input"
+                    required
                     value={formData.firstName}
-                    onChange={(e) => setFormData({...formData, firstName: e.target.value})}
+                    onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
                   />
                 </div>
                 <div className="form-group">
                   <label className="form-label">Último Nome</label>
-                  <input 
-                    type="text" 
-                    className="form-input" 
-                    required 
+                  <input
+                    type="text"
+                    className="form-input"
+                    required
                     value={formData.lastName}
-                    onChange={(e) => setFormData({...formData, lastName: e.target.value})}
+                    onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
                   />
                 </div>
               </div>
-              
               <div className="form-row">
                 <div className="form-group">
                   <label className="form-label">Adultos</label>
-                  <input 
-                    type="number" 
-                    min="1" 
-                    className="form-input" 
-                    required 
+                  <input
+                    type="number"
+                    min="1"
+                    className="form-input"
+                    required
                     value={formData.adults}
-                    onChange={(e) => setFormData({...formData, adults: e.target.value})}
+                    onChange={(e) => setFormData({ ...formData, adults: e.target.value })}
                   />
                 </div>
                 <div className="form-group">
                   <label className="form-label">Crianças</label>
-                  <input 
-                    type="number" 
-                    min="0" 
-                    className="form-input" 
-                    required 
+                  <input
+                    type="number"
+                    min="0"
+                    className="form-input"
+                    required
                     value={formData.children}
-                    onChange={(e) => setFormData({...formData, children: e.target.value})}
+                    onChange={(e) => setFormData({ ...formData, children: e.target.value })}
                   />
                 </div>
               </div>
-
               <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
-                <button type="submit" disabled={submitting} className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }}>
-                  {submitting ? 'A registar...' : 'Registar na Fila'}
+                <button type="submit" className="btn btn-primary" style={{ flex: 1 }} disabled={submitting}>
+                  {submitting ? 'A registar...' : 'Adicionar à Fila'}
                 </button>
-                <button 
-                  type="button" 
-                  className="btn" 
-                  style={{ background: 'var(--border-color)', color: 'white' }}
-                  onClick={() => setShowModal(false)}
-                >
+                <button type="button" className="btn" style={{ background: 'rgba(255,255,255,0.1)' }} onClick={() => setShowModal(false)}>
                   Cancelar
                 </button>
               </div>

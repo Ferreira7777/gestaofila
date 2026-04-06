@@ -355,6 +355,20 @@ function KioskMode({ companyId, companyName, userEmail, onExit }) {
             <UserPlus size={22} />
             {submitting ? 'A registar...' : 'Entrar na Fila'}
           </button>
+
+          {/* RGPD Disclaimer */}
+          <div style={{ marginTop: '1rem', display: 'flex', alignItems: 'flex-start', gap: '0.5rem', opacity: 0.8 }}>
+            <input 
+              type="checkbox" 
+              defaultChecked 
+              required
+              id="rgpd-consent"
+              style={{ marginTop: '0.2rem', width: '12px', height: '12px' }}
+            />
+            <label htmlFor="rgpd-consent" style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.5)', lineHeight: '1.2' }}>
+              Autorizo o tratamento dos meus dados para efeitos de contacto no âmbito desta reserva e futuras comunicações do estabelecimento, em conformidade com o RGPD.
+            </label>
+          </div>
         </form>
 
         {/* Rodapé com botão de saída discreto */}
