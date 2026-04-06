@@ -650,8 +650,15 @@ function App() {
           let cleanPhone = phone.replace(/\s+/g, '').replace('+', '');
           if (cleanPhone.length === 9) cleanPhone = `351${cleanPhone}`;
           
-          const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(finalMsg)}`;
-          window.open(waUrl, '_blank');
+          const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+          if (isMobile) {
+            // Protocolo direto para abrir a APP nativa sem abas intermédias
+            window.location.href = `whatsapp://send?phone=${cleanPhone}&text=${encodeURIComponent(finalMsg)}`;
+          } else {
+            // Fallback para Desktop
+            const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(finalMsg)}`;
+            window.open(waUrl, '_blank');
+          }
           successCount++;
         } else {
           // Canal SMS
